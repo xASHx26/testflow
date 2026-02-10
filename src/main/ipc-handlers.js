@@ -300,6 +300,7 @@ function registerIpcHandlers(context) {
   function _resolveFlow(flowId) {
     try {
       if (!flowId) return null;
+      if (!projectManager.getProjectPath()) return null;
       return flowEngine.getFlow(flowId) || null;
     } catch (_) {
       return null;
@@ -314,7 +315,7 @@ function registerIpcHandlers(context) {
 
   ipcMain.handle('export:selenium-python', async (event, flowId, options) => {
     const flow = _resolveFlow(flowId);
-    if (!flow) throw new Error('No flow selected — create or select a flow before exporting.');
+    if (!flow) return null;
 
     // Selenium export produces multiple files — pick a directory
     const result = await dialog.showOpenDialog(windowManager.getMainWindow(), {
@@ -328,7 +329,7 @@ function registerIpcHandlers(context) {
 
   ipcMain.handle('export:markdown', async (event, flowId) => {
     const flow = _resolveFlow(flowId);
-    if (!flow) throw new Error('No flow selected — create or select a flow before exporting.');
+    if (!flow) return null;
 
     const result = await dialog.showSaveDialog(windowManager.getMainWindow(), {
       title: 'Export Markdown Report',
@@ -342,7 +343,7 @@ function registerIpcHandlers(context) {
 
   ipcMain.handle('export:json', async (event, flowId) => {
     const flow = _resolveFlow(flowId);
-    if (!flow) throw new Error('No flow selected — create or select a flow before exporting.');
+    if (!flow) return null;
 
     const result = await dialog.showSaveDialog(windowManager.getMainWindow(), {
       title: 'Export Flow as JSON',

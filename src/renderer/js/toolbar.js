@@ -295,6 +295,10 @@ class Toolbar {
 
   // ─── Export ───────────────────────────────────────────────
   async _export(format, label) {
+    if (!window.App?.projectLoaded) {
+      this._log('warning', `Export ${label}: No project open — create or open a project first.`);
+      return;
+    }
     const flowId = window.FlowEditor?.activeFlowId;
     if (!flowId) {
       this._log('warning', `Export ${label}: No flow selected — create or select a flow first.`);
