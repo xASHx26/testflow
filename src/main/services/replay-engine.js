@@ -234,6 +234,11 @@ class ReplayEngine extends EventEmitter {
   /**
    * Wait for an element to meet the wait condition
    */
+  /**
+   * Wait for an element to meet the wait condition.
+   * Also validates that the locator finds EXACTLY ONE element to avoid
+   * clicking the wrong element when a generic selector matches multiple.
+   */
   async _waitForElement(locator, waitConfig) {
     const timeout = waitConfig?.timeout || 5000;
     const waitType = waitConfig?.type || 'visible';
@@ -266,7 +271,21 @@ class ReplayEngine extends EventEmitter {
         }
 
         const found = await this.browserEngine.executeScript(check);
-        if (found) return true;
+        if (found) {
+          // For CSS selectors, verify uniqueness — if multiple elements match,
+          // reject this locator so the fallback chain tries a more specific one.
+          if (locator.type === 'css') {
+            const escapedCss = locator.value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const count = await this.browserEngine.executeScript(
+              `document.querySelectorAll('${escapedCss}').length`
+            );
+            if (count > 1) {
+              // Not unique — let the fallback chain try the next locator
+              return false;
+            }
+          }
+          return true;
+        }
       } catch (e) {
         // Continue waiting
       }
@@ -540,6 +559,10 @@ class ReplayEngine extends EventEmitter {
         return `document.querySelector('[role="${escaped}"]')`;
       case 'aria-label':
         return `document.querySelector('[aria-label="${escaped}"]')`;
+      case 'linkText':
+        return `Array.from(document.querySelectorAll('a')).find(el => el.textContent.trim() === '${escaped}')`;
+      case 'buttonText':
+        return `Array.from(document.querySelectorAll('button,[role="button"]')).find(el => el.textContent.trim() === '${escaped}')`;
       case 'text':
         return `Array.from(document.querySelectorAll('*')).find(el => el.textContent.trim() === '${escaped}')`;
       default:

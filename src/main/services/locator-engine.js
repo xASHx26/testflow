@@ -99,7 +99,52 @@ class LocatorEngine {
       });
     }
 
-    // 7. CSS selector (composed)
+    // 7. href-based locator (for links)
+    if (elementData.tag === 'a' && elementData.href) {
+      // Use relative href path if same origin
+      let hrefVal = elementData.href;
+      try {
+        const u = new URL(hrefVal);
+        // Store relative path for same-origin links (more portable)
+        hrefVal = u.pathname + u.search + u.hash;
+      } catch (_) { /* keep as-is */ }
+      if (hrefVal) {
+        locators.push({
+          type: 'css',
+          value: `a[href="${this._escapeCSS(hrefVal)}"]`,
+          strategy: 'href',
+          confidence: 0,
+        });
+      }
+    }
+
+    // 8. Link-text locator (Selenium-style By.linkText)
+    if (elementData.tag === 'a' && elementData.text && elementData.text.length < 80) {
+      const cleanText = elementData.text.replace(/\s+/g, ' ').trim();
+      if (cleanText.length > 0 && cleanText.length < 80) {
+        locators.push({
+          type: 'linkText',
+          value: cleanText,
+          strategy: 'linkText',
+          confidence: 0,
+        });
+      }
+    }
+
+    // 9. Button-text locator (for buttons without good identifiers)
+    if ((elementData.tag === 'button' || elementData.role === 'button') && elementData.text && elementData.text.length < 80) {
+      const cleanText = elementData.text.replace(/\s+/g, ' ').trim();
+      if (cleanText.length > 0 && cleanText.length < 80) {
+        locators.push({
+          type: 'buttonText',
+          value: cleanText,
+          strategy: 'buttonText',
+          confidence: 0,
+        });
+      }
+    }
+
+    // 10. CSS selector (composed)
     const cssSelector = this._buildCSSSelector(elementData);
     if (cssSelector) {
       locators.push({
@@ -110,7 +155,7 @@ class LocatorEngine {
       });
     }
 
-    // 8. Text-based locator
+    // 11. Text-based XPath locator
     if (elementData.text && elementData.text.length < 100) {
       locators.push({
         type: 'xpath',
@@ -120,7 +165,7 @@ class LocatorEngine {
       });
     }
 
-    // 9. Relative XPath
+    // 12. Relative XPath
     if (elementData.xpath) {
       locators.push({
         type: 'xpath',
@@ -130,7 +175,7 @@ class LocatorEngine {
       });
     }
 
-    // 10. Data-testid / data-cy / data-test (testing attributes)
+    // 13. Data-testid / data-cy / data-test (testing attributes)
     for (const attr of ['data-testid', 'data-cy', 'data-test', 'data-automation-id']) {
       if (elementData[attr]) {
         locators.push({
@@ -142,7 +187,7 @@ class LocatorEngine {
       }
     }
 
-    // 11. Absolute XPath (lowest priority)
+    // 14. Absolute XPath (lowest priority)
     if (elementData.absoluteXpath) {
       locators.push({
         type: 'xpath',
@@ -218,15 +263,37 @@ class LocatorEngine {
         readability = 0.85;
         break;
 
-      case 'css':
-        uniqueness = 0.7;
-        stability = 0.65;
-        readability = 0.7;
+      case 'href':
+        uniqueness = 0.9;
+        stability = 0.8;
+        readability = 0.85;
         break;
 
+      case 'linkText':
+        uniqueness = 0.85;
+        stability = 0.8;
+        readability = 0.95;
+        break;
+
+      case 'buttonText':
+        uniqueness = 0.8;
+        stability = 0.75;
+        readability = 0.95;
+        break;
+
+      case 'css': {
+        // Penalize bare-tag CSS selectors (e.g. just 'a' or 'div') that
+        // will match many elements on any real page.
+        const isBareTag = /^[a-z]+$/i.test(locator.value);
+        uniqueness = isBareTag ? 0.1 : 0.7;
+        stability = isBareTag ? 0.15 : 0.65;
+        readability = 0.7;
+        break;
+      }
+
       case 'text':
-        uniqueness = 0.6;
-        stability = 0.5;
+        uniqueness = 0.75;
+        stability = 0.7;
         readability = 0.9;
         break;
 
@@ -298,6 +365,31 @@ class LocatorEngine {
     // Add type attribute for inputs
     if (el.tag === 'input' && el.type) {
       selector += `[type="${el.type}"]`;
+    }
+
+    // Add href for links (relative path for portability)
+    if (el.tag === 'a' && el.href) {
+      try {
+        const u = new URL(el.href);
+        const relPath = u.pathname + u.search + u.hash;
+        if (relPath && relPath !== '/') {
+          selector += `[href="${this._escapeCSS(relPath)}"]`;
+        }
+      } catch (_) {
+        if (el.href.startsWith('/')) {
+          selector += `[href="${this._escapeCSS(el.href)}"]`;
+        }
+      }
+    }
+
+    // Add type for buttons
+    if (el.tag === 'button' && el.type) {
+      selector += `[type="${el.type}"]`;
+    }
+
+    // If selector is still bare tag, try adding nth-of-type from tagIndex
+    if (/^[a-z]+$/i.test(selector) && typeof el.tagIndex === 'number') {
+      selector += `:nth-of-type(${el.tagIndex + 1})`;
     }
 
     return selector || null;
