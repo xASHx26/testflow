@@ -395,9 +395,37 @@ class ReplayEngine extends EventEmitter {
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         await this._visualMoveAndHighlight(locatorJs, `select: "${value}"`);
         await this._visualClickRipple();
-        await this.browserEngine.executeScript(`
-          window.__testflow_cursor?.selectEffect(${JSON.stringify(locatorJs)}, '${escaped}')
+        // Perform the actual selection with value-attribute → display-text fallback
+        const selectOk = await this.browserEngine.executeScript(`
+          (() => {
+            const el = ${locatorJs};
+            if (!el) return 'not-found';
+            el.focus();
+            if (el.tagName && el.tagName.toLowerCase() === 'select' && el.options) {
+              const prev = el.value;
+              // 1. Try exact value-attribute match
+              const byVal = Array.from(el.options).find(o => o.value === '${escaped}');
+              if (byVal) {
+                el.value = byVal.value;
+              } else {
+                // 2. Try display-text match (backward compat)
+                const byText = Array.from(el.options).find(
+                  o => o.text.trim() === '${escaped}' || o.textContent.trim() === '${escaped}'
+                );
+                if (byText) el.value = byText.value;
+                else el.value = '${escaped}';
+              }
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return el.value !== prev ? 'ok' : (el.value === '${escaped}' ? 'ok' : 'no-change');
+            } else {
+              el.value = '${escaped}';
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return 'ok';
+            }
+          })()
         `);
+        if (selectOk === 'not-found') throw new Error('Select element not found during action');
+        if (selectOk === 'no-change') throw new Error(`Failed to select "${value}" — no matching option`);
         await this._sleep(350);
         await this._visualCleanup();
         break;
@@ -452,6 +480,28 @@ class ReplayEngine extends EventEmitter {
         `);
         break;
 
+      case 'change': {
+        const value = Object.values(step.testData || {})[0] || '';
+        const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        await this._visualMoveAndHighlight(locatorJs, `set: "${value}"`);
+        await this._visualClickRipple();
+        await this.browserEngine.executeScript(`
+          (() => {
+            const el = ${locatorJs};
+            if (!el) return;
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value')?.set;
+            if (nativeSetter) nativeSetter.call(el, '${escaped}');
+            else el.value = '${escaped}';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          })()
+        `);
+        await this._sleep(200);
+        await this._visualCleanup();
+        break;
+      }
+
       // Handle navigate type within a step (mid-flow navigation)
       case 'navigate': {
         const url = step.testData?.url || step.url;
@@ -478,9 +528,22 @@ class ReplayEngine extends EventEmitter {
   async _visualClick(locatorJs, label) {
     await this._visualMoveAndHighlight(locatorJs, label);
     await this._visualClickRipple();
-    // Perform the actual click
+    // Perform the actual click with full pointer/mouse event sequence
     await this.browserEngine.executeScript(`
-      (() => { const el = ${locatorJs}; if (el) el.click(); })()
+      (() => {
+        const el = ${locatorJs};
+        if (!el) return;
+        if (typeof el.focus === 'function') el.focus();
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const opts = { bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy, button:0 };
+        el.dispatchEvent(new PointerEvent('pointerdown', opts));
+        el.dispatchEvent(new MouseEvent('mousedown', opts));
+        el.dispatchEvent(new PointerEvent('pointerup', opts));
+        el.dispatchEvent(new MouseEvent('mouseup', opts));
+        el.click();
+      })()
     `);
     await this._sleep(120);
     await this._visualCleanup();

@@ -92,6 +92,8 @@
       const type = (target.type || '').toLowerCase();
       if (tag === 'input' && this._TEXT_TYPES.has(type)) return;
       if (tag === 'textarea') return;
+      // Skip <select> / <option> — the real selection is captured by the change event
+      if (tag === 'select' || tag === 'option') return;
       // Skip contenteditable (handled by input)
       if (target.isContentEditable) return;
 

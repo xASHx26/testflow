@@ -288,9 +288,10 @@ class RecorderEngine extends EventEmitter {
       }
 
       case 'change': {
-        // Select / combobox → selected text
+        // Select / combobox → prefer the option's value attribute (e.g. "1")
+        // over the display text (e.g. "Option 1") so el.value = val works.
         if (ct === 'select' || ct === 'combobox' || ct === 'listbox' || ct === 'multiselect' || ct === 'cascader')
-          return { [key]: rawAction.value || '' };
+          return { [key]: rawAction.selectedValue || rawAction.value || '' };
         // Checkbox / toggle → boolean
         if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
         // Radio → value

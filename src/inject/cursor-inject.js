@@ -299,7 +299,23 @@
     if (!el) return;
     el.focus();
     await sleep(120);
-    el.value = value;
+
+    if (el.tagName && el.tagName.toLowerCase() === 'select' && el.options) {
+      // 1. Try exact value-attribute match (e.g. "1", "2")
+      const byVal = Array.from(el.options).find(o => o.value === value);
+      if (byVal) {
+        el.value = byVal.value;
+      } else {
+        // 2. Try display-text match (backward compat with old recordings)
+        const byText = Array.from(el.options).find(
+          o => o.text.trim() === value || o.textContent.trim() === value
+        );
+        if (byText) el.value = byText.value;
+        else el.value = value; // last resort
+      }
+    } else {
+      el.value = value;
+    }
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
