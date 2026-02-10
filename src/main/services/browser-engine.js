@@ -185,6 +185,14 @@ class BrowserEngine extends EventEmitter {
   }
 
   /**
+   * Inject the visual cursor overlay (for replay visualization)
+   */
+  async injectCursor() {
+    const cursorScript = path.join(__dirname, '..', '..', 'inject', 'cursor-inject.js');
+    return this.injectScript(cursorScript);
+  }
+
+  /**
    * Enable element inspector mode (always on, this is for re-injection if needed)
    */
   async enableInspector() {

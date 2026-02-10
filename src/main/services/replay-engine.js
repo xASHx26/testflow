@@ -37,12 +37,17 @@ class ReplayEngine extends EventEmitter {
     this.emit('replay-started', { flowId: flow.id, totalSteps: flow.steps.length });
 
     try {
+      // Inject the visual cursor overlay so the user can see the mouse
+      await this._injectCursor();
+
       // Navigate to the initial URL before replaying steps
       if (flow.startUrl) {
         this.emit('step-started', { stepId: '__navigate_start', index: -1, total: flow.steps.length, label: `Navigating to ${flow.startUrl}` });
         await this.browserEngine.navigate(flow.startUrl);
         // Wait for page to settle
         await this._sleep(1500);
+        // Re-inject cursor after navigation (new page)
+        await this._injectCursor();
         this.emit('step-completed', { stepId: '__navigate_start', index: -1, status: 'passed', label: `Navigated to start URL` });
       }
 
@@ -50,6 +55,9 @@ class ReplayEngine extends EventEmitter {
     } catch (error) {
       this.emit('replay-error', { error: error.message });
     }
+
+    // Clean up the visual cursor
+    await this._destroyCursor();
 
     this.state = 'idle';
     this.emit('state-changed', this.state);
@@ -69,6 +77,7 @@ class ReplayEngine extends EventEmitter {
     if (this.abortController) {
       this.abortController.aborted = true;
     }
+    await this._destroyCursor();
     this.state = 'idle';
     this.emit('state-changed', this.state);
     return { success: true };
@@ -131,6 +140,12 @@ class ReplayEngine extends EventEmitter {
       this.results.push(result);
 
       this.emit('step-complete', { ...result, index: i, total: steps.length });
+
+      // Re-inject cursor after each step (in case the page navigated)
+      await this._ensureCursor();
+
+      // Brief pause between steps so the user can follow along
+      await this._sleep(300);
 
       if (result.status === 'failed') {
         this.emit('step-failed', result);
@@ -263,60 +278,80 @@ class ReplayEngine extends EventEmitter {
   }
 
   /**
-   * Perform the action on the element
+   * Inject the visual cursor into the browser page (idempotent)
+   */
+  async _injectCursor() {
+    try {
+      await this.browserEngine.injectCursor();
+      await this.browserEngine.executeScript('window.__testflow_cursor?.init()');
+      await this.browserEngine.executeScript('window.__testflow_cursor?.show()');
+    } catch (e) { /* page not ready */ }
+  }
+
+  /**
+   * Tear down the visual cursor overlay
+   */
+  async _destroyCursor() {
+    try {
+      await this.browserEngine.executeScript('window.__testflow_cursor?.destroy()');
+    } catch (e) { /* non-fatal */ }
+  }
+
+  /**
+   * Re-inject cursor if the page navigated (cursor DOM lost)
+   */
+  async _ensureCursor() {
+    try {
+      const exists = await this.browserEngine.executeScript('!!window.__testflow_cursor');
+      if (!exists) await this._injectCursor();
+    } catch (e) {
+      await this._injectCursor();
+    }
+  }
+
+  /**
+   * Perform the action on the element — WITH visual cursor animation
    */
   async _performAction(step, locator) {
     const locatorJs = this._buildLocatorJs(locator);
 
+    // Make sure cursor is present (page may have reloaded)
+    await this._ensureCursor();
+
     switch (step.type) {
       case 'click':
-        await this.browserEngine.executeScript(`
-          (() => {
-            const el = ${locatorJs};
-            if (el) { el.scrollIntoView({block:'center'}); el.click(); }
-          })()
-        `);
+        await this._visualClick(locatorJs, 'click');
         break;
 
       case 'check': {
-        // If testData provides a boolean, set the checkbox to that state
         const cbVal = Object.values(step.testData || {})[0];
         if (typeof cbVal === 'boolean') {
+          // Move cursor, highlight, click only if state differs
+          await this._visualMoveAndHighlight(locatorJs, cbVal ? 'check ✓' : 'uncheck ✗');
           await this.browserEngine.executeScript(`
             (() => {
               const el = ${locatorJs};
-              if (el) {
-                el.scrollIntoView({block:'center'});
-                if (el.checked !== ${cbVal}) el.click();
-              }
+              if (el && el.checked !== ${cbVal}) el.click();
             })()
           `);
+          await this._visualClickRipple();
+          await this._visualCleanup();
         } else {
-          await this.browserEngine.executeScript(`
-            (() => { const el = ${locatorJs}; if (el) { el.scrollIntoView({block:'center'}); el.click(); } })()
-          `);
+          await this._visualClick(locatorJs, 'check');
         }
         break;
       }
 
       case 'radio': {
-        // If testData provides a string value + element.name, click the matching radio
         const radioVal  = Object.values(step.testData || {})[0];
         const radioName = step.element?.name;
         if (radioName && radioVal != null) {
           const eName = String(radioName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           const eVal  = String(radioVal).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-          await this.browserEngine.executeScript(`
-            (() => {
-              let el = document.querySelector('input[type="radio"][name="${eName}"][value="${eVal}"]');
-              if (!el) el = ${locatorJs};
-              if (el) { el.scrollIntoView({block:'center'}); el.click(); }
-            })()
-          `);
+          const radioLocator = `(document.querySelector('input[type="radio"][name="${eName}"][value="${eVal}"]') || ${locatorJs})`;
+          await this._visualClick(radioLocator, `select: ${radioVal}`);
         } else {
-          await this.browserEngine.executeScript(`
-            (() => { const el = ${locatorJs}; if (el) { el.scrollIntoView({block:'center'}); el.click(); } })()
-          `);
+          await this._visualClick(locatorJs, 'radio');
         }
         break;
       }
@@ -324,43 +359,35 @@ class ReplayEngine extends EventEmitter {
       case 'type': {
         const value = Object.values(step.testData || {})[0] || '';
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        // Move cursor to field, highlight, then type character-by-character
+        await this._visualMoveAndHighlight(locatorJs, `type: "${value.length > 20 ? value.slice(0, 17) + '…' : value}"`);
+        await this._visualClickRipple();
+        // Typing effect (char by char in the injected page)
         await this.browserEngine.executeScript(`
-          (() => {
-            const el = ${locatorJs};
-            if (el) {
-              el.scrollIntoView({block:'center'});
-              el.focus();
-              el.value = '';
-              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-                || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-              if (nativeInputValueSetter) nativeInputValueSetter.call(el, '${escaped}');
-              else el.value = '${escaped}';
-              el.dispatchEvent(new Event('input', {bubbles:true}));
-              el.dispatchEvent(new Event('change', {bubbles:true}));
-            }
-          })()
+          window.__testflow_cursor?.typeEffect(${JSON.stringify(locatorJs)}, '${escaped}', ${Math.min(value.length * 55, 1800)})
         `);
+        await this._sleep(200);
+        await this._visualCleanup();
         break;
       }
 
       case 'select': {
         const value = Object.values(step.testData || {})[0] || '';
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        await this._visualMoveAndHighlight(locatorJs, `select: "${value}"`);
+        await this._visualClickRipple();
         await this.browserEngine.executeScript(`
-          (() => {
-            const el = ${locatorJs};
-            if (el) {
-              el.scrollIntoView({block:'center'});
-              el.value = '${escaped}';
-              el.dispatchEvent(new Event('change', {bubbles:true}));
-            }
-          })()
+          window.__testflow_cursor?.selectEffect(${JSON.stringify(locatorJs)}, '${escaped}')
         `);
+        await this._sleep(350);
+        await this._visualCleanup();
         break;
       }
 
       case 'slider': {
         const value = Object.values(step.testData || {})[0] || 0;
+        await this._visualMoveAndHighlight(locatorJs, `slide → ${value}`);
+        await this._visualClickRipple();
         await this.browserEngine.executeScript(`
           (() => {
             const el = ${locatorJs};
@@ -373,10 +400,14 @@ class ReplayEngine extends EventEmitter {
             }
           })()
         `);
+        await this._sleep(200);
+        await this._visualCleanup();
         break;
       }
 
       case 'submit':
+        await this._visualMoveAndHighlight(locatorJs, 'submit');
+        await this._visualClickRipple();
         await this.browserEngine.executeScript(`
           (() => {
             const el = ${locatorJs};
@@ -387,17 +418,107 @@ class ReplayEngine extends EventEmitter {
             }
           })()
         `);
+        await this._visualCleanup();
         break;
 
       case 'scroll':
+        await this.browserEngine.executeScript(`
+          window.__testflow_cursor?.showTooltip('scroll ↓');
+        `);
+        await this._sleep(200);
         await this.browserEngine.executeScript(`window.scrollBy(0, 300)`);
+        await this._sleep(300);
+        await this.browserEngine.executeScript(`
+          window.__testflow_cursor?.hideTooltip();
+        `);
         break;
 
-      default:
+      // Handle navigate type within a step (mid-flow navigation)
+      case 'navigate': {
+        const url = step.testData?.url || step.url;
         await this.browserEngine.executeScript(`
-          (() => { const el = ${locatorJs}; if (el) el.click(); })()
+          window.__testflow_cursor?.showTooltip('navigate → ${(url || '').replace(/'/g, "\\'")}');
         `);
+        await this._sleep(400);
+        await this.browserEngine.navigate(url);
+        await this._wait(step.wait);
+        await this._injectCursor();
+        break;
+      }
+
+      default:
+        await this._visualClick(locatorJs, step.type || 'action');
     }
+  }
+
+  // ─── Visual helpers ─────────────────────────────────────────
+
+  /**
+   * Full visual click sequence: move → highlight → tooltip → ripple → click → cleanup
+   */
+  async _visualClick(locatorJs, label) {
+    await this._visualMoveAndHighlight(locatorJs, label);
+    await this._visualClickRipple();
+    // Perform the actual click
+    await this.browserEngine.executeScript(`
+      (() => { const el = ${locatorJs}; if (el) el.click(); })()
+    `);
+    await this._sleep(120);
+    await this._visualCleanup();
+  }
+
+  /**
+   * Move cursor to element and show highlight + tooltip
+   */
+  async _visualMoveAndHighlight(locatorJs, label) {
+    try {
+      // Scroll into view
+      await this.browserEngine.executeScript(`
+        (() => { const el = ${locatorJs}; if (el) el.scrollIntoView({block:'center', behavior:'smooth'}); })()
+      `);
+      await this._sleep(250);
+
+      // Move cursor
+      await this.browserEngine.executeScript(`
+        window.__testflow_cursor?.moveToElement(${JSON.stringify(locatorJs)}, 400)
+      `);
+      await this._sleep(450);
+
+      // Highlight the target element
+      await this.browserEngine.executeScript(`
+        window.__testflow_cursor?.highlightElement(${JSON.stringify(locatorJs)})
+      `);
+
+      // Show tooltip
+      if (label) {
+        await this.browserEngine.executeScript(`
+          window.__testflow_cursor?.showTooltip(${JSON.stringify(label)})
+        `);
+      }
+      await this._sleep(200);
+    } catch (e) { /* non-fatal visual issue */ }
+  }
+
+  /**
+   * Play the click ripple effect
+   */
+  async _visualClickRipple() {
+    try {
+      await this.browserEngine.executeScript(`window.__testflow_cursor?.click()`);
+      await this._sleep(300);
+    } catch (e) { /* non-fatal */ }
+  }
+
+  /**
+   * Hide highlight + tooltip after action completes
+   */
+  async _visualCleanup() {
+    try {
+      await this.browserEngine.executeScript(`
+        window.__testflow_cursor?.hideHighlight();
+        window.__testflow_cursor?.hideTooltip();
+      `);
+    } catch (e) { /* non-fatal */ }
   }
 
   /**
