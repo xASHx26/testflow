@@ -299,9 +299,12 @@
 /* ─── Make bottom panel tab-content position relative for overlay ── */
 #tab-replay-log {
   position: relative;
+  overflow: hidden;
+}
+
+#tab-replay-log.active {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 /* ─── Side-by-side split layout ──────────────────── */
