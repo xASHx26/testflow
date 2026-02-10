@@ -13,6 +13,8 @@ class WindowManager {
     this.mainWindow = null;
     this.browserView = null;
     this.miniInspectorWindow = null;
+    this._browserViewHidden = false;
+    this._savedBrowserBounds = null;
   }
 
   /**
@@ -89,13 +91,46 @@ class WindowManager {
    * Update the BrowserView bounds when panels resize
    */
   updateBrowserViewBounds(bounds) {
-    if (this.browserView) {
+    if (this.browserView && !this._browserViewHidden) {
       this.browserView.setBounds(bounds);
     }
   }
 
   /**
-   * Remove the BrowserView
+   * Temporarily hide the BrowserView by removing it from the window.
+   * The view itself is NOT destroyed — its webContents stay alive.
+   */
+  hideBrowserView() {
+    if (this.mainWindow && this.browserView && !this._browserViewHidden) {
+      this._browserViewHidden = true;
+      this._savedBrowserBounds = this.browserView.getBounds();
+      this.mainWindow.removeBrowserView(this.browserView);
+    }
+  }
+
+  /**
+   * Restore a previously-hidden BrowserView by re-adding it to the window.
+   */
+  showBrowserView() {
+    if (this.mainWindow && this.browserView && this._browserViewHidden) {
+      this._browserViewHidden = false;
+      this.mainWindow.addBrowserView(this.browserView);
+      if (this._savedBrowserBounds) {
+        this.browserView.setBounds(this._savedBrowserBounds);
+        delete this._savedBrowserBounds;
+      }
+    }
+  }
+
+  /**
+   * Whether the BrowserView is currently hidden
+   */
+  isBrowserViewHidden() {
+    return !!this._browserViewHidden;
+  }
+
+  /**
+   * Remove the BrowserView (destroys it permanently)
    */
   detachBrowserView() {
     if (this.mainWindow && this.browserView) {

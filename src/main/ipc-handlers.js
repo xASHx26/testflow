@@ -122,26 +122,20 @@ function registerIpcHandlers(context) {
   });
 
   ipcMain.handle('browser:updateBounds', async (event, bounds) => {
+    // Skip if the BrowserView is temporarily hidden (overlay open)
+    if (windowManager.isBrowserViewHidden()) return true;
     browserEngine.updateBounds(bounds);
     return true;
   });
 
   // Hide / show the BrowserView (used when overlays need to appear above)
   ipcMain.handle('browser:hide', async () => {
-    const view = windowManager.browserView;
-    if (view) {
-      view._savedBounds = view.getBounds();
-      view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-    }
+    windowManager.hideBrowserView();
     return true;
   });
 
   ipcMain.handle('browser:show', async () => {
-    const view = windowManager.browserView;
-    if (view && view._savedBounds) {
-      view.setBounds(view._savedBounds);
-      delete view._savedBounds;
-    }
+    windowManager.showBrowserView();
     return true;
   });
 
