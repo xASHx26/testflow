@@ -66,6 +66,8 @@ class App {
         message: `✅ Project created: ${result.project.name}`,
         timestamp: Date.now()
       });
+      // Auto-save session state right after creation
+      await this._persistSessionState();
     } catch (err) {
       alert(`Failed to create project: ${err.message}`);
     }
@@ -82,6 +84,8 @@ class App {
         message: `✅ Project opened: ${result.project.name}`,
         timestamp: Date.now()
       });
+      // Restore session state (test cases, inspector, URL, etc.)
+      await this._restoreSessionState(result.project);
     } catch (err) {
       alert(`Failed to open project: ${err.message}`);
     }
@@ -94,6 +98,7 @@ class App {
     }
     try {
       await window.testflow.project.save();
+      await this._persistSessionState();
       window.EventBus.emit('console:log', {
         level: 'info',
         message: 'Project saved.',
@@ -101,6 +106,82 @@ class App {
       });
     } catch (err) {
       alert(`Failed to save: ${err.message}`);
+    }
+  }
+
+  /**
+   * Gather all renderer state and persist to session.json via main process.
+   */
+  async _persistSessionState() {
+    try {
+      const state = {
+        currentUrl: document.getElementById('url-input')?.value || '',
+        activeFlowId: window.FlowEditor?.activeFlowId || null,
+        testCases: window.TestCaseManager?.getState?.() || [],
+        inspector: window.InspectorUI?.getState?.() || { elements: [], testDataRows: [] },
+        savedAt: new Date().toISOString(),
+      };
+      await window.testflow.project.saveState(state);
+    } catch (err) {
+      console.error('[TestFlow] Failed to save session state', err);
+    }
+  }
+
+  /**
+   * Restore renderer state from session.json after opening a project.
+   */
+  async _restoreSessionState(projectManifest) {
+    try {
+      const state = await window.testflow.project.loadState();
+      if (!state) return;
+
+      // Small delay to let flow list refresh first (triggered by project:opened event)
+      await new Promise(r => setTimeout(r, 300));
+
+      // Restore URL bar and navigate if we have a URL
+      if (state.currentUrl) {
+        const urlInput = document.getElementById('url-input');
+        if (urlInput) urlInput.value = state.currentUrl;
+        // Navigate browser to the saved URL
+        try {
+          const bounds = window.PanelManager.getBrowserBounds();
+          await window.testflow.browser.attachView(bounds);
+          const placeholder = document.getElementById('browser-placeholder');
+          if (placeholder) placeholder.classList.add('hidden');
+          await window.testflow.browser.navigate(state.currentUrl);
+        } catch (navErr) {
+          console.warn('[TestFlow] Could not restore URL navigation', navErr);
+        }
+      }
+
+      // Restore active flow
+      if (state.activeFlowId || projectManifest?.activeFlowId) {
+        const flowId = state.activeFlowId || projectManifest.activeFlowId;
+        if (window.FlowEditor) {
+          window.FlowEditor.activeFlowId = flowId;
+          try { await window.testflow.flow.setActive(flowId); } catch (_) {}
+          // Re-render flow list to highlight the correct flow and show its steps
+          await window.FlowEditor._refreshFlows();
+        }
+      }
+
+      // Restore test cases
+      if (state.testCases && window.TestCaseManager?.loadState) {
+        window.TestCaseManager.loadState(state.testCases);
+      }
+
+      // Restore inspector elements and test data
+      if (state.inspector && window.InspectorUI?.loadState) {
+        window.InspectorUI.loadState(state.inspector);
+      }
+
+      window.EventBus.emit('console:log', {
+        level: 'info',
+        message: `Session state restored (${state.testCases?.length || 0} test cases, ${state.inspector?.elements?.length || 0} inspector elements)`,
+        timestamp: Date.now()
+      });
+    } catch (err) {
+      console.error('[TestFlow] Failed to restore session state', err);
     }
   }
 

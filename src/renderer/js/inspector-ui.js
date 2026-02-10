@@ -342,6 +342,28 @@ class InspectorUI {
     d.textContent = str || '';
     return d.innerHTML;
   }
+
+  // ─── State persistence API ──────────────────────────────
+  getState() {
+    return {
+      elements: this.elements.map(e => ({ ...e })),
+      testDataRows: this.testDataRows.map(r => ({ ...r })),
+    };
+  }
+
+  loadState(data) {
+    if (!data) return;
+    if (Array.isArray(data.elements)) {
+      this.elements = data.elements.map(e => ({ ...e }));
+      // Reset counter to avoid ID collisions
+      this._counter = Math.max(this._counter, this.elements.length + (data.testDataRows?.length || 0) + 100);
+    }
+    if (Array.isArray(data.testDataRows)) {
+      this.testDataRows = data.testDataRows.map(r => ({ ...r }));
+    }
+    this._renderElements();
+    this._renderTestData();
+  }
 }
 
 window.InspectorUI = new InspectorUI();

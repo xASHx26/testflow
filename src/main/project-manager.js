@@ -259,6 +259,32 @@ class ProjectManager {
     fs.writeFileSync(dataPath, JSON.stringify(testData, null, 2), 'utf-8');
     return dataPath;
   }
+
+  /**
+   * Save the full renderer session state (test cases, inspector, URL, etc.)
+   * This is stored as session.json in the data directory.
+   */
+  saveSessionState(state) {
+    if (!this.projectDir) throw new Error('No project open');
+    const sessionPath = path.join(this.projectDir, 'session.json');
+    fs.writeFileSync(sessionPath, JSON.stringify(state, null, 2), 'utf-8');
+    return sessionPath;
+  }
+
+  /**
+   * Load the renderer session state from disk.
+   * Returns null if no session file exists.
+   */
+  loadSessionState() {
+    if (!this.projectDir) return null;
+    const sessionPath = path.join(this.projectDir, 'session.json');
+    if (!fs.existsSync(sessionPath)) return null;
+    try {
+      return JSON.parse(fs.readFileSync(sessionPath, 'utf-8'));
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 module.exports = { ProjectManager };

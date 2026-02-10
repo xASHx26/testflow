@@ -365,6 +365,19 @@
   // Initial render
   render();
 
+  // ─── State persistence API ──────────────────────────────────
+  function getState() {
+    return testCases.map(tc => ({ ...tc }));
+  }
+
+  function loadState(data) {
+    testCases.length = 0;
+    if (Array.isArray(data)) {
+      data.forEach(tc => testCases.push({ ...tc }));
+    }
+    render();
+  }
+
   // Expose for external use
-  window.TestCaseManager = { addTestCase, render };
+  window.TestCaseManager = { addTestCase, render, getState, loadState };
 })();

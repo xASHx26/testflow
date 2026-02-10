@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('testflow', {
     open: () => ipcRenderer.invoke('project:open'),
     save: () => ipcRenderer.invoke('project:save'),
     getInfo: () => ipcRenderer.invoke('project:getInfo'),
+    saveState: (state) => ipcRenderer.invoke('project:saveState', state),
+    loadState: () => ipcRenderer.invoke('project:loadState'),
   },
 
   // ─── Browser ───────────────────────────────────────────────

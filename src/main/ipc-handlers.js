@@ -66,15 +66,34 @@ function registerIpcHandlers(context) {
       console.log(`[TestFlow] Persisted ${persisted} in-memory flow(s) to opened project`);
     }
 
+    // Restore active flow ID from manifest
+    if (project.project.activeFlowId) {
+      flowEngine.setActiveFlow(project.project.activeFlowId);
+    }
+
     return project;
   });
 
   ipcMain.handle('project:save', async () => {
+    // Persist the active flow ID into the manifest
+    const activeId = flowEngine.getActiveFlowId();
+    if (projectManager.currentProject) {
+      projectManager.currentProject.activeFlowId = activeId || null;
+    }
     return projectManager.saveProject();
   });
 
   ipcMain.handle('project:getInfo', async () => {
     return projectManager.getProjectInfo();
+  });
+
+  // ─── Session State (test cases, inspector, URL, etc.) ────
+  ipcMain.handle('project:saveState', async (event, state) => {
+    return projectManager.saveSessionState(state);
+  });
+
+  ipcMain.handle('project:loadState', async () => {
+    return projectManager.loadSessionState();
   });
 
   // ─── Browser Engine ──────────────────────────────────────────
