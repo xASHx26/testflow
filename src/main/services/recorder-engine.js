@@ -336,48 +336,88 @@ class RecorderEngine extends EventEmitter {
   }
 
   /**
-   * Generate a test case JSON from a recorded flow
+   * Generate a test case JSON from a recorded flow.
+   *
+   * Produces a top-level `testData` map (field → value) that is easy to
+   * edit, plus `testDataMeta` for UI hints.  Each data-bearing step gets a
+   * `testDataKey` that points into the map so replay can look up the value.
    */
   _generateTestCase(flow) {
-    const testCase = {
-      id: flow.id,
-      name: flow.name || 'Untitled Test Case',
-      startUrl: flow.startUrl || '',
-      createdAt: new Date().toISOString(),
-      status: 'recorded',
-      steps: (flow.steps || []).map((step, index) => {
-        const tc = {
-          stepIndex: index,
-          action: step.type || step.action,  // Use classified type (click/type/select etc.)
-          description: step.description || '',
-          locator: step.locators?.[0] || null,
-          allLocators: step.locators || [],
-          waitCondition: step.wait || null,
-        };
-        // Include test data for type/input actions
-        if (step.action === 'type' || step.action === 'input') {
-          tc.testData = {
-            value: step.value || '',
-            field: step.element?.name || step.element?.id || step.locators?.[0]?.value || 'unknown',
-            type: step.element?.type || 'text',
-          };
-        }
-        // Include value for select/change actions
-        if (step.action === 'change' || step.action === 'select') {
-          tc.testData = {
-            value: step.value || '',
-            field: step.element?.name || step.element?.id || 'unknown',
-            type: 'select',
-          };
-        }
-        // Include navigation URL
-        if (step.action === 'navigate') {
-          tc.url = step.url || '';
-        }
+    const testData     = {};   // flat key→value map (the editable test data)
+    const testDataMeta = {};   // key→{type, stepIndex, label, elementName, elementId}
+    const usedKeys     = {};   // collision counter
+
+    const DATA_TYPES = new Set(['type', 'select', 'check', 'radio', 'slider', 'change']);
+
+    const steps = (flow.steps || []).map((step, index) => {
+      const classifiedType = step.type || step.action;
+
+      const tc = {
+        stepIndex: index,
+        action: classifiedType,
+        description: step.description || '',
+        locator: step.locators?.[0] || null,
+        allLocators: step.locators || [],
+        waitCondition: step.wait || null,
+      };
+
+      // Navigation URL (kept on the step, not in testData)
+      if (step.action === 'navigate') {
+        tc.url = step.url || '';
         return tc;
-      }),
+      }
+
+      // Aggregate form-input data into the top-level testData map
+      if (step.testData && Object.keys(step.testData).length > 0 && DATA_TYPES.has(classifiedType)) {
+        const [rawKey, rawValue] = Object.entries(step.testData)[0];
+
+        // Ensure unique key (email, email_2, email_3 …)
+        let key = rawKey;
+        if (usedKeys[key]) {
+          usedKeys[key]++;
+          key = `${rawKey}_${usedKeys[key]}`;
+        } else {
+          usedKeys[key] = 1;
+        }
+
+        // Infer field type from element metadata
+        const elType = (step.element?.type || '').toLowerCase();
+        const elTag  = (step.element?.tag  || '').toLowerCase();
+        let fieldType = elType || 'text';
+        if (elTag === 'select') fieldType = 'select';
+        else if (elType === 'checkbox') fieldType = 'checkbox';
+        else if (elType === 'radio')    fieldType = 'radio';
+        else if (elType === 'range')    fieldType = 'slider';
+
+        // Human-readable label
+        const el = step.element || {};
+        const label = el.label || el.ariaLabel || el.placeholder || el.name || el.id || rawKey;
+
+        testData[key]     = rawValue;
+        testDataMeta[key] = {
+          type:        fieldType,
+          stepIndex:   index,
+          label:       label,
+          elementName: el.name || '',
+          elementId:   el.id   || '',
+        };
+
+        tc.testDataKey = key;
+      }
+
+      return tc;
+    });
+
+    return {
+      id:           flow.id,
+      name:         flow.name || 'Untitled Test Case',
+      startUrl:     flow.startUrl || '',
+      createdAt:    new Date().toISOString(),
+      status:       'recorded',
+      testData,
+      testDataMeta,
+      steps,
     };
-    return testCase;
   }
 }
 

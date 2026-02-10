@@ -261,15 +261,48 @@
       </div>
       <div id="testcase-editor-overlay" class="testcase-editor-overlay hidden">
         <div class="testcase-editor-container">
+
+          <!-- Header with title + tabs -->
           <div class="testcase-editor-header">
-            <span>Edit Test Case JSON</span>
+            <span id="editor-tc-name">Edit Test Case</span>
+            <div class="td-editor-tabs">
+              <button class="td-editor-tab active" data-tab="testdata">Test Data</button>
+              <button class="td-editor-tab" data-tab="json">Raw JSON</button>
+            </div>
             <button id="btn-close-editor" class="modal-close-btn">✕</button>
           </div>
-          <textarea id="testcase-json-editor" class="testcase-json-editor" spellcheck="false"></textarea>
+
+          <!-- Test Data tab: editable key-value table -->
+          <div id="td-tab-testdata" class="td-tab-content active">
+            <div class="td-table-wrap">
+              <table class="td-table">
+                <thead>
+                  <tr>
+                    <th class="td-col-key">Field</th>
+                    <th class="td-col-val">Value</th>
+                    <th class="td-col-type">Type</th>
+                  </tr>
+                </thead>
+                <tbody id="td-table-body">
+                  <!-- rows injected by JS -->
+                </tbody>
+              </table>
+              <div id="td-empty" class="td-empty hidden">No test data — this test has no form inputs.</div>
+            </div>
+          </div>
+
+          <!-- Raw JSON tab: full test case JSON -->
+          <div id="td-tab-json" class="td-tab-content">
+            <textarea id="testcase-json-editor" class="testcase-json-editor" spellcheck="false"></textarea>
+          </div>
+
+          <!-- Footer -->
           <div class="testcase-editor-footer">
-            <button id="btn-save-testcase" class="replay-log-btn primary">Save & Replay</button>
+            <button id="btn-save-testcase" class="replay-log-btn primary">Save &amp; Replay</button>
+            <button id="btn-save-only" class="replay-log-btn">Save</button>
             <button id="btn-cancel-testcase" class="replay-log-btn">Cancel</button>
           </div>
+
         </div>
       </div>
     </div>

@@ -2,8 +2,9 @@
  * TestFlow — Test Case Manager
  *
  * Manages test case CRUD in the Replay Log tab.
- * Receives generated test cases from the recorder, displays them as cards,
- * and supports edit (JSON editor), duplicate, delete, and re-run.
+ * Now features a proper Test Data Editor: form inputs recorded during a flow
+ * are shown as an editable key-value table.  Editing a value changes the next
+ * replay so the new data is used (different email, different dropdown, etc.).
  */
 
 (function () {
@@ -11,18 +12,50 @@
 
   const testCases = []; // in-memory store
   let editingIndex = -1;
+  let activeEditorTab = 'testdata'; // 'testdata' | 'json'
 
   // ─── DOM refs ────────────────────────────────────────────────
-  const listEl = document.getElementById('testcase-list');
-  const logOutputEl = document.getElementById('replay-log-output');
-  const editorOverlay = document.getElementById('testcase-editor-overlay');
-  const jsonEditor = document.getElementById('testcase-json-editor');
-  const btnSave = document.getElementById('btn-save-testcase');
-  const btnCancel = document.getElementById('btn-cancel-testcase');
-  const btnClose = document.getElementById('btn-close-editor');
-  const btnReplayAll = document.getElementById('btn-replay-all');
-  const btnClear = document.getElementById('btn-clear-testcases');
-  const btnClearLog = document.getElementById('btn-clear-replay-log');
+  const listEl          = document.getElementById('testcase-list');
+  const logOutputEl     = document.getElementById('replay-log-output');
+  const editorOverlay   = document.getElementById('testcase-editor-overlay');
+  const jsonEditor      = document.getElementById('testcase-json-editor');
+  const tdTableBody     = document.getElementById('td-table-body');
+  const tdEmpty         = document.getElementById('td-empty');
+  const editorNameEl    = document.getElementById('editor-tc-name');
+  const btnSave         = document.getElementById('btn-save-testcase');
+  const btnSaveOnly     = document.getElementById('btn-save-only');
+  const btnCancel       = document.getElementById('btn-cancel-testcase');
+  const btnClose        = document.getElementById('btn-close-editor');
+  const btnReplayAll    = document.getElementById('btn-replay-all');
+  const btnClear        = document.getElementById('btn-clear-testcases');
+  const btnClearLog     = document.getElementById('btn-clear-replay-log');
+
+  // ─── Editor tab switching ───────────────────────────────────
+  document.querySelectorAll('.td-editor-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.td-editor-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.td-tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      const pane = document.getElementById(`td-tab-${target}`);
+      if (pane) pane.classList.add('active');
+      activeEditorTab = target;
+
+      // Sync: when switching TO json tab, serialize current testData edits
+      if (target === 'json' && editingIndex >= 0) {
+        const tc = collectTestDataEdits();
+        jsonEditor.value = JSON.stringify(tc, null, 2);
+      }
+      // Sync: when switching TO testdata tab, parse JSON edits
+      if (target === 'testdata' && editingIndex >= 0) {
+        try {
+          const parsed = JSON.parse(jsonEditor.value);
+          testCases[editingIndex] = { ...parsed, status: testCases[editingIndex]?.status || 'recorded', lastRun: testCases[editingIndex]?.lastRun || null };
+          populateTestDataTable(testCases[editingIndex]);
+        } catch (_) { /* leave table as-is if JSON is invalid */ }
+      }
+    });
+  });
 
   // ─── Listen for generated test cases from main process ──────
   if (window.testflow?.testcase?.onGenerated) {
@@ -57,7 +90,6 @@
     window.testflow.replay.onFinished?.((data) => {
       const status = data.passed ? '✅ PASSED' : '❌ FAILED';
       appendLog(`■ Replay finished — ${status}`, data.passed ? 'success' : 'error');
-      // Update the latest replayed test case status
       updateLatestStatus(data);
     });
 
@@ -70,7 +102,6 @@
   function addTestCase(tc) {
     testCases.push({ ...tc, status: tc.status || 'recorded', lastRun: null });
     render();
-    // Auto-switch to Replay Log tab
     const tab = document.querySelector('.panel-tab[data-tab="replay-log"]');
     if (tab) tab.click();
   }
@@ -100,23 +131,37 @@
                        tc.status === 'running' ? '⏳' : '📄';
 
     const stepsCount = tc.steps?.length || 0;
-    const inputSteps = tc.steps?.filter(s => s.testData)?.length || 0;
+
+    // Build a concise test-data summary from the top-level map
+    const tdKeys = Object.keys(tc.testData || {});
+    let dataSummary = '';
+    if (tdKeys.length > 0) {
+      const preview = tdKeys.slice(0, 3).map(k => {
+        const v = tc.testData[k];
+        const display = typeof v === 'boolean' ? (v ? '✓' : '✗')
+                      : typeof v === 'number' ? String(v)
+                      : String(v).length > 18 ? String(v).substring(0, 15) + '…' : String(v);
+        return `${k}: ${display}`;
+      }).join(', ');
+      dataSummary = `<div class="testcase-data-preview">${escHtml(preview)}${tdKeys.length > 3 ? ` +${tdKeys.length - 3} more` : ''}</div>`;
+    }
 
     card.innerHTML = `
       <div class="testcase-card-header">
         <span class="testcase-status-icon">${statusIcon}</span>
         <span class="testcase-name">${escHtml(tc.name || 'Test Case')}</span>
-        <span class="testcase-meta">${stepsCount} steps${inputSteps ? `, ${inputSteps} inputs` : ''}</span>
+        <span class="testcase-meta">${stepsCount} steps · ${tdKeys.length} field${tdKeys.length !== 1 ? 's' : ''}</span>
       </div>
       <div class="testcase-card-body">
         <div class="testcase-url">${escHtml(tc.startUrl || '—')}</div>
+        ${dataSummary}
         ${tc.lastRun ? `<div class="testcase-lastrun">Last run: ${new Date(tc.lastRun).toLocaleTimeString()}</div>` : ''}
       </div>
       <div class="testcase-card-actions">
         <button class="tc-btn tc-btn-play" data-action="play" title="Replay this test case">
           <span class="icon icon-play"></span> Run
         </button>
-        <button class="tc-btn tc-btn-edit" data-action="edit" title="Edit test case JSON">
+        <button class="tc-btn tc-btn-edit" data-action="edit" title="Edit test data">
           <span class="icon icon-edit"></span> Edit
         </button>
         <button class="tc-btn tc-btn-dup" data-action="duplicate" title="Duplicate">
@@ -177,17 +222,157 @@
       tc.status = 'failed';
       appendLog(`⚠ Error running test case: ${err.message || err}`, 'error');
     }
-    // Snapshot network log from this test run
     tc.networkLog = window.NetworkPanel?.getRequests?.() || [];
     render();
   }
 
+  // ──────────────────────────────────────────────────────────────
+  //  Test Data Editor
+  // ──────────────────────────────────────────────────────────────
   function openEditor(idx) {
     editingIndex = idx;
     const tc = testCases[idx];
     if (!tc) return;
+
+    // Update header
+    if (editorNameEl) editorNameEl.textContent = tc.name || 'Edit Test Case';
+
+    // Populate the Test Data table
+    populateTestDataTable(tc);
+
+    // Populate the raw JSON pane
     jsonEditor.value = JSON.stringify(tc, null, 2);
+
+    // Reset to Test Data tab
+    document.querySelectorAll('.td-editor-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.td-tab-content').forEach(c => c.classList.remove('active'));
+    const firstTab  = document.querySelector('.td-editor-tab[data-tab="testdata"]');
+    const firstPane = document.getElementById('td-tab-testdata');
+    if (firstTab) firstTab.classList.add('active');
+    if (firstPane) firstPane.classList.add('active');
+    activeEditorTab = 'testdata';
+
     editorOverlay.classList.remove('hidden');
+  }
+
+  /**
+   * Populate the Test Data table with rows from tc.testData + tc.testDataMeta
+   */
+  function populateTestDataTable(tc) {
+    if (!tdTableBody) return;
+    tdTableBody.innerHTML = '';
+
+    const td   = tc.testData     || {};
+    const meta = tc.testDataMeta || {};
+    const keys = Object.keys(td);
+
+    if (keys.length === 0) {
+      tdEmpty?.classList.remove('hidden');
+      return;
+    }
+    tdEmpty?.classList.add('hidden');
+
+    keys.forEach(key => {
+      const value = td[key];
+      const m     = meta[key] || {};
+      const ftype = m.type || 'text';
+      const label = m.label || key;
+
+      const tr = document.createElement('tr');
+      tr.className = 'td-row';
+      tr.dataset.key = key;
+
+      // Field name cell
+      const tdKey = document.createElement('td');
+      tdKey.className = 'td-cell td-cell-key';
+      tdKey.innerHTML = `<span class="td-field-label" title="${escHtml(key)}">${escHtml(label)}</span>`;
+
+      // Value cell — different input depending on type
+      const tdVal = document.createElement('td');
+      tdVal.className = 'td-cell td-cell-val';
+      tdVal.appendChild(buildValueInput(key, value, ftype));
+
+      // Type badge cell
+      const tdType = document.createElement('td');
+      tdType.className = 'td-cell td-cell-type';
+      tdType.innerHTML = `<span class="td-type-badge td-type-${ftype}">${ftype}</span>`;
+
+      tr.appendChild(tdKey);
+      tr.appendChild(tdVal);
+      tr.appendChild(tdType);
+      tdTableBody.appendChild(tr);
+    });
+  }
+
+  /**
+   * Build the correct input control for a field type
+   */
+  function buildValueInput(key, value, ftype) {
+    const wrap = document.createElement('div');
+    wrap.className = 'td-input-wrap';
+
+    if (ftype === 'checkbox') {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'td-input td-input-checkbox';
+      cb.checked = !!value;
+      cb.dataset.tdKey = key;
+      wrap.appendChild(cb);
+      const label = document.createElement('span');
+      label.className = 'td-checkbox-label';
+      label.textContent = value ? 'Checked' : 'Unchecked';
+      cb.addEventListener('change', () => { label.textContent = cb.checked ? 'Checked' : 'Unchecked'; });
+      wrap.appendChild(label);
+    } else if (ftype === 'slider') {
+      const num = document.createElement('input');
+      num.type = 'number';
+      num.className = 'td-input td-input-number';
+      num.value = value ?? 0;
+      num.step = 'any';
+      num.dataset.tdKey = key;
+      wrap.appendChild(num);
+    } else if (ftype === 'password') {
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'td-input td-input-text';
+      inp.value = value ?? '';
+      inp.dataset.tdKey = key;
+      wrap.appendChild(inp);
+    } else {
+      // text, email, select, radio, number, etc.
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'td-input td-input-text';
+      inp.value = value ?? '';
+      inp.dataset.tdKey = key;
+      wrap.appendChild(inp);
+    }
+
+    return wrap;
+  }
+
+  /**
+   * Collect edited values from the Test Data table back into the test case
+   */
+  function collectTestDataEdits() {
+    const tc = JSON.parse(JSON.stringify(testCases[editingIndex]));
+    if (!tc) return tc;
+
+    tdTableBody?.querySelectorAll('.td-row').forEach(row => {
+      const key = row.dataset.key;
+      const inp = row.querySelector('[data-td-key]');
+      if (!inp || !key) return;
+
+      if (inp.type === 'checkbox') {
+        tc.testData[key] = inp.checked;
+      } else if (inp.type === 'number') {
+        tc.testData[key] = parseFloat(inp.value) || 0;
+      } else {
+        tc.testData[key] = inp.value;
+      }
+    });
+
+    return tc;
   }
 
   function closeEditor() {
@@ -195,17 +380,22 @@
     editingIndex = -1;
   }
 
-  function saveAndReplay() {
+  function saveEdits(andReplay) {
     if (editingIndex < 0) return;
+
     try {
-      const edited = JSON.parse(jsonEditor.value);
+      let edited;
+      if (activeEditorTab === 'json') {
+        edited = JSON.parse(jsonEditor.value);
+      } else {
+        edited = collectTestDataEdits();
+      }
       testCases[editingIndex] = { ...edited, status: 'recorded', lastRun: null };
       closeEditor();
       render();
-      // Re-run the edited test case
-      runTestCase(editingIndex);
+      if (andReplay) runTestCase(editingIndex);
     } catch (err) {
-      alert('Invalid JSON: ' + err.message);
+      appendLog(`⚠ Save error: ${err.message}`, 'error');
     }
   }
 
@@ -262,9 +452,7 @@
   function viewNetworkLog(idx) {
     const tc = testCases[idx];
     if (!tc || !tc.networkLog || tc.networkLog.length === 0) return;
-    // Load saved network requests into the Network panel
     window.NetworkPanel?.loadRequests?.(tc.networkLog);
-    // Switch to the Network tab
     const networkTab = document.querySelector('.panel-tab[data-tab="network"]');
     if (networkTab) networkTab.click();
   }
@@ -285,7 +473,6 @@
     input.className = 'testcase-rename-input';
     input.value = currentName;
 
-    // Replace the span with the input
     nameEl.replaceWith(input);
     input.focus();
     input.select();
@@ -316,7 +503,6 @@
   }
 
   function updateLatestStatus(data) {
-    // Find the test case that was just replayed (latest running)
     const idx = testCases.findIndex(tc => tc.status === 'running');
     if (idx >= 0) {
       testCases[idx].status = data.passed ? 'passed' : 'failed';
@@ -325,7 +511,7 @@
     }
   }
 
-  // ─── Log helper (writes to the right-side replay log pane) ──
+  // ─── Log helper ─────────────────────────────────────────────
   function appendLog(message, level = 'info') {
     if (!logOutputEl) return;
     const line = document.createElement('div');
@@ -336,7 +522,8 @@
   }
 
   // ─── Button bindings ────────────────────────────────────────
-  btnSave?.addEventListener('click', saveAndReplay);
+  btnSave?.addEventListener('click', () => saveEdits(true));
+  btnSaveOnly?.addEventListener('click', () => saveEdits(false));
   btnCancel?.addEventListener('click', closeEditor);
   btnClose?.addEventListener('click', closeEditor);
 

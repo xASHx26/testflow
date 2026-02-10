@@ -270,8 +270,6 @@ class ReplayEngine extends EventEmitter {
 
     switch (step.type) {
       case 'click':
-      case 'check':
-      case 'radio':
         await this.browserEngine.executeScript(`
           (() => {
             const el = ${locatorJs};
@@ -279,6 +277,49 @@ class ReplayEngine extends EventEmitter {
           })()
         `);
         break;
+
+      case 'check': {
+        // If testData provides a boolean, set the checkbox to that state
+        const cbVal = Object.values(step.testData || {})[0];
+        if (typeof cbVal === 'boolean') {
+          await this.browserEngine.executeScript(`
+            (() => {
+              const el = ${locatorJs};
+              if (el) {
+                el.scrollIntoView({block:'center'});
+                if (el.checked !== ${cbVal}) el.click();
+              }
+            })()
+          `);
+        } else {
+          await this.browserEngine.executeScript(`
+            (() => { const el = ${locatorJs}; if (el) { el.scrollIntoView({block:'center'}); el.click(); } })()
+          `);
+        }
+        break;
+      }
+
+      case 'radio': {
+        // If testData provides a string value + element.name, click the matching radio
+        const radioVal  = Object.values(step.testData || {})[0];
+        const radioName = step.element?.name;
+        if (radioName && radioVal != null) {
+          const eName = String(radioName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          const eVal  = String(radioVal).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          await this.browserEngine.executeScript(`
+            (() => {
+              let el = document.querySelector('input[type="radio"][name="${eName}"][value="${eVal}"]');
+              if (!el) el = ${locatorJs};
+              if (el) { el.scrollIntoView({block:'center'}); el.click(); }
+            })()
+          `);
+        } else {
+          await this.browserEngine.executeScript(`
+            (() => { const el = ${locatorJs}; if (el) { el.scrollIntoView({block:'center'}); el.click(); } })()
+          `);
+        }
+        break;
+      }
 
       case 'type': {
         const value = Object.values(step.testData || {})[0] || '';
@@ -423,13 +464,17 @@ class ReplayEngine extends EventEmitter {
   }
 
   /**
-   * Replay from a test case JSON (edited version of a recorded flow).
-   * Converts the testCase steps back into a flow-like structure and runs replay.
+   * Replay from a test case JSON (with top-level testData map).
+   * Converts the testCase steps back into a flow-like structure using the
+   * editable testData map, then runs the standard replay pipeline.
    */
   async replayTestCase(testCase) {
     if (!testCase || !testCase.steps) {
       return { success: false, message: 'Invalid test case' };
     }
+
+    const tdMap  = testCase.testData     || {};
+    const tdMeta = testCase.testDataMeta || {};
 
     // Convert test case back to a flow object
     const flow = {
@@ -439,22 +484,37 @@ class ReplayEngine extends EventEmitter {
       steps: testCase.steps.map((tc, i) => {
         const step = {
           id: `tc-step-${i}`,
-          type: tc.action,       // 'type' is used by _performAction
-          action: tc.action,     // keep raw action too
+          type: tc.action,
+          action: tc.action,
           locators: tc.allLocators || (tc.locator ? [tc.locator] : []),
           wait: tc.waitCondition || null,
           enabled: true,
         };
-        // Restore testData object for type/select/change actions
-        if (tc.testData) {
-          step.testData = { [tc.testData.field || 'value']: tc.testData.value };
-          step.value = tc.testData.value;
-          step.element = { name: tc.testData.field, type: tc.testData.type };
+
+        // New format: look up value from top-level testData via testDataKey
+        if (tc.testDataKey && tc.testDataKey in tdMap) {
+          const value = tdMap[tc.testDataKey];
+          const meta  = tdMeta[tc.testDataKey] || {};
+          step.testData = { [tc.testDataKey]: value };
+          step.value    = value;
+          step.element  = {
+            name: meta.elementName || tc.testDataKey,
+            type: meta.type || 'text',
+            id:   meta.elementId || '',
+          };
         }
+        // Legacy support: old-style per-step testData {field, value, type}
+        else if (tc.testData) {
+          step.testData = { [tc.testData.field || 'value']: tc.testData.value };
+          step.value    = tc.testData.value;
+          step.element  = { name: tc.testData.field, type: tc.testData.type };
+        }
+
         if (tc.url) {
-          step.url = tc.url;
+          step.url      = tc.url;
           step.testData = { url: tc.url };
         }
+
         return step;
       }),
     };
