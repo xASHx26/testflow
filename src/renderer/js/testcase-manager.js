@@ -2,11 +2,8 @@
  * TestFlow — Test Case Manager
  *
  * Manages test case CRUD in the Replay Log tab.
- * Features:
- *  - Test Data Editor: editable key-value table for form inputs
- *  - PageData viewer: raw per-step page data (elements, locators, values)
- *  - BrowserView is hidden while the editor overlay is open so the overlay
- *    isn't obscured by the native BrowserView window.
+ * The editor now opens in a separate modal BrowserWindow (editor-window.html)
+ * to avoid z-index / BrowserView overlap issues.
  */
 
 (function () {
@@ -14,50 +11,26 @@
 
   const testCases = []; // in-memory store
   let editingIndex = -1;
-  let activeEditorTab = 'testdata'; // 'testdata' | 'json'
 
   // ─── DOM refs ────────────────────────────────────────────────
   const listEl          = document.getElementById('testcase-list');
   const logOutputEl     = document.getElementById('replay-log-output');
-  const editorOverlay   = document.getElementById('testcase-editor-overlay');
-  const jsonEditor      = document.getElementById('testcase-json-editor');
-  const tdTableBody     = document.getElementById('td-table-body');
-  const tdEmpty         = document.getElementById('td-empty');
-  const editorNameEl    = document.getElementById('editor-tc-name');
-  const btnSave         = document.getElementById('btn-save-testcase');
-  const btnSaveOnly     = document.getElementById('btn-save-only');
-  const btnCancel       = document.getElementById('btn-cancel-testcase');
-  const btnClose        = document.getElementById('btn-close-editor');
   const btnReplayAll    = document.getElementById('btn-replay-all');
   const btnClear        = document.getElementById('btn-clear-testcases');
   const btnClearLog     = document.getElementById('btn-clear-replay-log');
 
-  // ─── Editor tab switching ───────────────────────────────────
-  document.querySelectorAll('.td-editor-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.td-editor-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.td-tab-content').forEach(c => c.classList.remove('active'));
-      tab.classList.add('active');
-      const target = tab.dataset.tab;
-      const pane = document.getElementById(`td-tab-${target}`);
-      if (pane) pane.classList.add('active');
-      activeEditorTab = target;
-
-      // Sync: when switching TO json tab, serialize current testData edits
-      if (target === 'json' && editingIndex >= 0) {
-        const tc = collectTestDataEdits();
-        jsonEditor.value = JSON.stringify(tc, null, 2);
+  // ─── Listen for saved results from the modal editor window ──
+  if (window.testflow?.editor?.onSaved) {
+    window.testflow.editor.onSaved((data) => {
+      const { tc, andReplay } = data;
+      if (editingIndex >= 0 && editingIndex < testCases.length) {
+        testCases[editingIndex] = { ...tc, status: 'recorded', lastRun: null };
+        render();
+        if (andReplay) runTestCase(editingIndex);
       }
-      // Sync: when switching TO testdata tab, parse JSON edits
-      if (target === 'testdata' && editingIndex >= 0) {
-        try {
-          const parsed = JSON.parse(jsonEditor.value);
-          testCases[editingIndex] = { ...parsed, status: testCases[editingIndex]?.status || 'recorded', lastRun: testCases[editingIndex]?.lastRun || null };
-          populateTestDataTable(testCases[editingIndex]);
-        } catch (_) { /* leave table as-is if JSON is invalid */ }
-      }
+      editingIndex = -1;
     });
-  });
+  }
 
   // ─── Listen for generated test cases from main process ──────
   if (window.testflow?.testcase?.onGenerated) {
@@ -224,316 +197,13 @@
   }
 
   // ──────────────────────────────────────────────────────────────
-  //  Browser hide/show helpers for overlay visibility
-  // ──────────────────────────────────────────────────────────────
-  function hideBrowserView() {
-    // Suppress panel-manager resize updates so they don't restore the view
-    window.PanelManager?.suppressBrowserBounds?.();
-    window.testflow?.browser?.hide?.();
-  }
-  function showBrowserView() {
-    window.testflow?.browser?.show?.();
-    // Re-enable and recalculate bounds
-    window.PanelManager?.restoreBrowserBounds?.();
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  //  Test Data Editor
+  //  Test Data Editor — opens a separate modal BrowserWindow
   // ──────────────────────────────────────────────────────────────
   function openEditor(idx) {
     editingIndex = idx;
     const tc = testCases[idx];
     if (!tc) return;
-
-    // Hide the BrowserView so the overlay isn't behind it
-    hideBrowserView();
-
-    // Update header
-    if (editorNameEl) editorNameEl.textContent = tc.name || 'Edit Test Case';
-
-    // Populate the Test Data table
-    populateTestDataTable(tc);
-
-    // Populate the raw JSON pane
-    jsonEditor.value = JSON.stringify(tc, null, 2);
-
-    // Reset to Test Data tab
-    document.querySelectorAll('.td-editor-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.td-tab-content').forEach(c => c.classList.remove('active'));
-    const firstTab  = document.querySelector('.td-editor-tab[data-tab="testdata"]');
-    const firstPane = document.getElementById('td-tab-testdata');
-    if (firstTab) firstTab.classList.add('active');
-    if (firstPane) firstPane.classList.add('active');
-    activeEditorTab = 'testdata';
-
-    editorOverlay.classList.remove('hidden');
-  }
-
-  /**
-   * Populate the Test Data table with rows from tc.testData + tc.testDataMeta
-   */
-  function populateTestDataTable(tc) {
-    if (!tdTableBody) return;
-    tdTableBody.innerHTML = '';
-
-    const td   = tc.testData     || {};
-    const meta = tc.testDataMeta || {};
-    const keys = Object.keys(td);
-
-    if (keys.length === 0) {
-      tdEmpty?.classList.remove('hidden');
-      return;
-    }
-    tdEmpty?.classList.add('hidden');
-
-    keys.forEach(key => {
-      const value = td[key];
-      const m     = meta[key] || {};
-      // Support both new `controlType` and legacy `type`
-      const controlType = m.controlType || m.type || 'text';
-      const label = m.label || key;
-
-      const tr = document.createElement('tr');
-      tr.className = 'td-row';
-      tr.dataset.key = key;
-
-      // Field name cell
-      const tdKey = document.createElement('td');
-      tdKey.className = 'td-cell td-cell-key';
-      tdKey.innerHTML = `<span class="td-field-label" title="${escHtml(key)}">${escHtml(label)}</span>`;
-
-      // Value cell — different input depending on controlType
-      const tdVal = document.createElement('td');
-      tdVal.className = 'td-cell td-cell-val';
-      tdVal.appendChild(buildValueInput(key, value, controlType));
-
-      // Type badge cell
-      const tdType = document.createElement('td');
-      tdType.className = 'td-cell td-cell-type';
-      tdType.innerHTML = `<span class="td-type-badge td-type-${controlType}">${controlType}</span>`;
-
-      tr.appendChild(tdKey);
-      tr.appendChild(tdVal);
-      tr.appendChild(tdType);
-      tdTableBody.appendChild(tr);
-    });
-  }
-
-  /**
-   * Build the correct input control for a controlType.
-   *
-   * Comprehensive list of supported types:
-   *   text, password, email, number, tel, url, search — text input
-   *   textarea, contenteditable — textarea
-   *   checkbox, toggle — checkbox
-   *   radio — text input (value is the selected option string)
-   *   select, combobox, listbox, multiselect, cascader — text input
-   *   slider, rating, meter — number input
-   *   color — color input
-   *   file — readonly text (filename)
-   *   date, time, datetime, month, week — appropriate date/time input
-   *   button, link, submit — readonly flag
-   */
-  function buildValueInput(key, value, controlType) {
-    const wrap = document.createElement('div');
-    wrap.className = 'td-input-wrap';
-
-    // ── Boolean types: checkbox / toggle ──────────────────────
-    if (controlType === 'checkbox' || controlType === 'toggle') {
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.className = 'td-input td-input-checkbox';
-      cb.checked = !!value;
-      cb.dataset.tdKey = key;
-      wrap.appendChild(cb);
-      const label = document.createElement('span');
-      label.className = 'td-checkbox-label';
-      label.textContent = value ? 'Checked' : 'Unchecked';
-      cb.addEventListener('change', () => { label.textContent = cb.checked ? 'Checked' : 'Unchecked'; });
-      wrap.appendChild(label);
-      return wrap;
-    }
-
-    // ── Numeric types: slider / rating / meter / number ──────
-    if (controlType === 'slider' || controlType === 'rating' || controlType === 'meter' || controlType === 'number') {
-      const num = document.createElement('input');
-      num.type = 'number';
-      num.className = 'td-input td-input-number';
-      num.value = value ?? 0;
-      num.step = 'any';
-      num.dataset.tdKey = key;
-      wrap.appendChild(num);
-      return wrap;
-    }
-
-    // ── Color ────────────────────────────────────────────────
-    if (controlType === 'color') {
-      const clr = document.createElement('input');
-      clr.type = 'color';
-      clr.className = 'td-input td-input-color';
-      clr.value = value || '#000000';
-      clr.dataset.tdKey = key;
-      wrap.appendChild(clr);
-      // Also show hex text
-      const hex = document.createElement('span');
-      hex.className = 'td-color-hex';
-      hex.textContent = clr.value;
-      clr.addEventListener('input', () => { hex.textContent = clr.value; });
-      wrap.appendChild(hex);
-      return wrap;
-    }
-
-    // ── Date / Time types ────────────────────────────────────
-    if (controlType === 'date') {
-      const d = document.createElement('input');
-      d.type = 'date';
-      d.className = 'td-input td-input-date';
-      d.value = value || '';
-      d.dataset.tdKey = key;
-      wrap.appendChild(d);
-      return wrap;
-    }
-    if (controlType === 'time') {
-      const t = document.createElement('input');
-      t.type = 'time';
-      t.className = 'td-input td-input-time';
-      t.value = value || '';
-      t.dataset.tdKey = key;
-      wrap.appendChild(t);
-      return wrap;
-    }
-    if (controlType === 'datetime') {
-      const dt = document.createElement('input');
-      dt.type = 'datetime-local';
-      dt.className = 'td-input td-input-datetime';
-      dt.value = value || '';
-      dt.dataset.tdKey = key;
-      wrap.appendChild(dt);
-      return wrap;
-    }
-    if (controlType === 'month') {
-      const m = document.createElement('input');
-      m.type = 'month';
-      m.className = 'td-input td-input-month';
-      m.value = value || '';
-      m.dataset.tdKey = key;
-      wrap.appendChild(m);
-      return wrap;
-    }
-    if (controlType === 'week') {
-      const w = document.createElement('input');
-      w.type = 'week';
-      w.className = 'td-input td-input-week';
-      w.value = value || '';
-      w.dataset.tdKey = key;
-      wrap.appendChild(w);
-      return wrap;
-    }
-
-    // ── File (read-only display of filename) ─────────────────
-    if (controlType === 'file') {
-      const f = document.createElement('input');
-      f.type = 'text';
-      f.className = 'td-input td-input-text td-input-readonly';
-      f.value = value || '';
-      f.readOnly = true;
-      f.placeholder = '(file path)';
-      f.dataset.tdKey = key;
-      wrap.appendChild(f);
-      return wrap;
-    }
-
-    // ── Textarea / contenteditable ───────────────────────────
-    if (controlType === 'textarea' || controlType === 'contenteditable') {
-      const ta = document.createElement('textarea');
-      ta.className = 'td-input td-input-textarea';
-      ta.rows = 2;
-      ta.value = value ?? '';
-      ta.dataset.tdKey = key;
-      wrap.appendChild(ta);
-      return wrap;
-    }
-
-    // ── Boolean flag (button/link clicks — true/false) ───────
-    if (typeof value === 'boolean' && controlType !== 'text') {
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.className = 'td-input td-input-checkbox';
-      cb.checked = !!value;
-      cb.dataset.tdKey = key;
-      wrap.appendChild(cb);
-      const label = document.createElement('span');
-      label.className = 'td-checkbox-label';
-      label.textContent = value ? 'Yes' : 'No';
-      cb.addEventListener('change', () => { label.textContent = cb.checked ? 'Yes' : 'No'; });
-      wrap.appendChild(label);
-      return wrap;
-    }
-
-    // ── Default: text input (covers text, password, email, url,
-    //    tel, search, select value, radio value, combobox, etc.) ─
-    const inp = document.createElement('input');
-    inp.type = 'text';
-    inp.className = 'td-input td-input-text';
-    inp.value = value ?? '';
-    inp.dataset.tdKey = key;
-    if (controlType === 'password') inp.type = 'password';
-    wrap.appendChild(inp);
-
-    return wrap;
-  }
-
-  /**
-   * Collect edited values from the Test Data table back into the test case.
-   * Reads every input/textarea/checkbox and coerces to the right JS type.
-   */
-  function collectTestDataEdits() {
-    const tc = JSON.parse(JSON.stringify(testCases[editingIndex]));
-    if (!tc) return tc;
-
-    tdTableBody?.querySelectorAll('.td-row').forEach(row => {
-      const key = row.dataset.key;
-      const inp = row.querySelector('[data-td-key]');
-      if (!inp || !key) return;
-
-      if (inp.type === 'checkbox') {
-        tc.testData[key] = inp.checked;
-      } else if (inp.type === 'number') {
-        tc.testData[key] = parseFloat(inp.value) || 0;
-      } else if (inp.tagName.toLowerCase() === 'textarea') {
-        tc.testData[key] = inp.value;
-      } else {
-        tc.testData[key] = inp.value;
-      }
-    });
-
-    return tc;
-  }
-
-  function closeEditor() {
-    editorOverlay.classList.add('hidden');
-    editingIndex = -1;
-    // Restore the BrowserView
-    showBrowserView();
-  }
-
-  function saveEdits(andReplay) {
-    if (editingIndex < 0) return;
-
-    try {
-      let edited;
-      if (activeEditorTab === 'json') {
-        edited = JSON.parse(jsonEditor.value);
-      } else {
-        edited = collectTestDataEdits();
-      }
-      testCases[editingIndex] = { ...edited, status: 'recorded', lastRun: null };
-      closeEditor();
-      render();
-      if (andReplay) runTestCase(editingIndex);
-    } catch (err) {
-      appendLog(`⚠ Save error: ${err.message}`, 'error');
-    }
+    window.testflow?.editor?.open?.({ tc, mode: 'edit' });
   }
 
   function duplicateTestCase(idx) {
@@ -569,24 +239,8 @@
   function viewPageData(idx) {
     const tc = testCases[idx];
     if (!tc || !tc.pageData || tc.pageData.length === 0) return;
-
-    // Hide browser so the overlay is visible
-    hideBrowserView();
-
     editingIndex = idx;
-    if (editorNameEl) editorNameEl.textContent = (tc.name || 'Test Case') + ' — Page Data';
-
-    // Show only the JSON tab with pageData content
-    document.querySelectorAll('.td-editor-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.td-tab-content').forEach(c => c.classList.remove('active'));
-    const jsonTab  = document.querySelector('.td-editor-tab[data-tab="json"]');
-    const jsonPane = document.getElementById('td-tab-json');
-    if (jsonTab) jsonTab.classList.add('active');
-    if (jsonPane) jsonPane.classList.add('active');
-    activeEditorTab = 'json';
-
-    jsonEditor.value = JSON.stringify(tc.pageData, null, 2);
-    editorOverlay.classList.remove('hidden');
+    window.testflow?.editor?.open?.({ tc, mode: 'pagedata' });
   }
 
   function downloadPageData(idx) {
@@ -700,11 +354,6 @@
   }
 
   // ─── Button bindings ────────────────────────────────────────
-  btnSave?.addEventListener('click', () => saveEdits(true));
-  btnSaveOnly?.addEventListener('click', () => saveEdits(false));
-  btnCancel?.addEventListener('click', closeEditor);
-  btnClose?.addEventListener('click', closeEditor);
-
   btnReplayAll?.addEventListener('click', async () => {
     for (let i = 0; i < testCases.length; i++) {
       await runTestCase(i);

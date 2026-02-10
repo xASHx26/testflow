@@ -463,6 +463,28 @@ function registerIpcHandlers(context) {
     windowManager.sendToRenderer('workspace:preset-changed', preset);
     return true;
   });
+
+  // ─── Editor Window (modal BrowserWindow for test-case editing) ─
+  ipcMain.handle('editor:open', async (event, payload) => {
+    // payload = { tc, mode } where mode is 'edit' | 'pagedata'
+    windowManager.openEditorWindow(payload);
+    return true;
+  });
+
+  ipcMain.handle('editor:get-data', async () => {
+    return windowManager.getEditorPayload();
+  });
+
+  ipcMain.handle('editor:save', async (event, editedTc, andReplay) => {
+    windowManager.sendToRenderer('editor:saved', { tc: editedTc, andReplay });
+    windowManager.closeEditorWindow();
+    return true;
+  });
+
+  ipcMain.handle('editor:close', async () => {
+    windowManager.closeEditorWindow();
+    return true;
+  });
 }
 
 module.exports = { registerIpcHandlers };

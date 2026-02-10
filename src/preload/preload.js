@@ -62,6 +62,12 @@ contextBridge.exposeInMainWorld('testflow', {
     onGenerated: (callback) => ipcRenderer.on('testcase:generated', (_, data) => callback(data)),
   },
 
+  // ─── Editor Window ─────────────────────────────────────────
+  editor: {
+    open: (payload) => ipcRenderer.invoke('editor:open', payload),
+    onSaved: (callback) => ipcRenderer.on('editor:saved', (_, data) => callback(data)),
+  },
+
   // ─── Locator ───────────────────────────────────────────────
   locator: {
     generate: (elementData) => ipcRenderer.invoke('locator:generate', elementData),

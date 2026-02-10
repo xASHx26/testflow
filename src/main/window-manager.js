@@ -188,6 +188,71 @@ class WindowManager {
     }
   }
 
+  // ─── Editor Window (modal BrowserWindow) ──────────────────
+  /**
+   * Open a modal editor window for editing a test case.
+   * @param {Object} payload  { tc, mode }  — mode is 'edit' or 'pagedata'
+   */
+  openEditorWindow(payload) {
+    // If one is already open, focus it
+    if (this.editorWindow && !this.editorWindow.isDestroyed()) {
+      this.editorWindow.focus();
+      return;
+    }
+
+    this._editorPayload = payload;
+
+    this.editorWindow = new BrowserWindow({
+      width: 740,
+      height: 560,
+      minWidth: 520,
+      minHeight: 400,
+      parent: this.mainWindow,
+      modal: true,
+      show: false,
+      frame: false,
+      resizable: true,
+      backgroundColor: '#1e1e2e',
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'editor-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    this.editorWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'editor-window.html')
+    );
+
+    this.editorWindow.once('ready-to-show', () => {
+      this.editorWindow.show();
+    });
+
+    this.editorWindow.on('closed', () => {
+      this.editorWindow = null;
+      this._editorPayload = null;
+    });
+  }
+
+  /**
+   * Returns the payload stored for the editor window (called by the editor's preload).
+   */
+  getEditorPayload() {
+    return this._editorPayload || null;
+  }
+
+  /**
+   * Close the editor window if open.
+   */
+  closeEditorWindow() {
+    if (this.editorWindow && !this.editorWindow.isDestroyed()) {
+      this.editorWindow.close();
+    }
+    this.editorWindow = null;
+    this._editorPayload = null;
+  }
+
   /**
    * Get the main window instance
    */

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Test Case</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* ── Header with drag region ─────────────────── */
+    .editor-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--bg-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--bg-hover);
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    .editor-header > * { -webkit-app-region: no-drag; }
+
+    .editor-title {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      -webkit-app-region: drag;
+    }
+
+    /* ── Tabs ────────────────────────────────────── */
+    .td-editor-tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--bg-tertiary);
+      border-radius: 5px;
+      padding: 2px;
+    }
+    .td-editor-tab {
+      padding: 3px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .td-editor-tab:hover { color: var(--text-primary); }
+    .td-editor-tab.active {
+      background: var(--bg-hover);
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    .close-btn {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 4px;
+      background: transparent; color: var(--text-muted);
+      font-size: 14px; cursor: pointer;
+    }
+    .close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* ── Tab Content ─────────────────────────────── */
+    .td-tab-content {
+      display: none;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .td-tab-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Body ────────────────────────────────────── */
+    .editor-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+
+    /* ── Test Data Table ─────────────────────────── */
+    .td-table-wrap { flex: 1; overflow-y: auto; padding: 4px 0; }
+    .td-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .td-table thead th {
+      position: sticky; top: 0; z-index: 1;
+      padding: 6px 12px; background: var(--bg-secondary);
+      color: var(--text-muted); font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px; text-align: left;
+      border-bottom: 1px solid var(--bg-active);
+    }
+    .td-col-key { width: 35%; }
+    .td-col-val { width: 50%; }
+    .td-col-type { width: 15%; }
+
+    .td-row { border-bottom: 1px solid var(--bg-hover); transition: background 0.1s; }
+    .td-row:hover { background: var(--bg-hover); }
+    .td-cell { padding: 6px 12px; vertical-align: middle; }
+    .td-cell-key {
+      color: var(--accent-mauve);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .td-field-label {
+      display: inline-block; max-width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* ── Inputs ──────────────────────────────────── */
+    .td-input-wrap { display: flex; align-items: center; gap: 8px; }
+    .td-input {
+      width: 100%; padding: 4px 8px;
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.4;
+      color: var(--text-primary); background: var(--bg-tertiary);
+      border: 1px solid var(--bg-active); border-radius: 4px;
+      outline: none; transition: border-color 0.15s;
+    }
+    .td-input:focus { border-color: var(--accent-blue); }
+    .td-input-checkbox {
+      width: 16px; height: 16px; flex-shrink: 0;
+      accent-color: var(--accent-blue); cursor: pointer;
+    }
+    .td-checkbox-label { font-size: 11px; color: var(--text-muted); }
+    .td-input-number { max-width: 120px; }
+    .td-input-color {
+      width: 32px; height: 28px; padding: 2px;
+      border-radius: 4px; cursor: pointer; flex-shrink: 0;
+    }
+    .td-color-hex { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+    .td-input-textarea { width: 100%; min-height: 40px; resize: vertical; }
+    .td-input-date, .td-input-time, .td-input-datetime, .td-input-month, .td-input-week {
+      max-width: 200px; color-scheme: dark;
+    }
+    .td-input-readonly { opacity: 0.65; cursor: default; }
+
+    /* ── Type badges ─────────────────────────────── */
+    .td-type-badge {
+      display: inline-block; padding: 2px 8px;
+      font-size: 10px; font-weight: 600; border-radius: 3px;
+      text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;
+    }
+    .td-type-text, .td-type-email, .td-type-tel, .td-type-search, .td-type-url { background: rgba(137,180,250,0.15); color: var(--accent-blue); }
+    .td-type-password { background: rgba(249,226,175,0.15); color: var(--accent-yellow); }
+    .td-type-select, .td-type-combobox, .td-type-listbox, .td-type-multiselect { background: rgba(203,166,247,0.15); color: var(--accent-mauve); }
+    .td-type-checkbox { background: rgba(166,227,161,0.15); color: var(--accent-green); }
+    .td-type-toggle { background: rgba(166,227,161,0.15); color: var(--accent-green); }
+    .td-type-radio { background: rgba(250,179,135,0.15); color: var(--accent-peach); }
+    .td-type-slider, .td-type-range, .td-type-number, .td-type-rating, .td-type-meter { background: rgba(148,226,213,0.15); color: var(--accent-teal); }
+    .td-type-color { background: rgba(245,194,231,0.15); color: var(--accent-pink); }
+    .td-type-file { background: rgba(249,226,175,0.15); color: var(--accent-yellow); }
+    .td-type-date, .td-type-time, .td-type-datetime, .td-type-month, .td-type-week { background: rgba(137,220,235,0.15); color: var(--accent-sky); }
+    .td-type-textarea, .td-type-contenteditable { background: rgba(137,180,250,0.15); color: var(--accent-blue); }
+    .td-type-button, .td-type-link, .td-type-submit { background: rgba(186,194,222,0.12); color: var(--text-muted); }
+    .td-type-unknown { background: rgba(186,194,222,0.08); color: var(--text-muted); }
+
+    .td-empty { padding: 32px 16px; text-align: center; color: var(--text-muted); font-size: 12px; }
+    .td-empty.hidden { display: none; }
+
+    /* ── JSON Editor ─────────────────────────────── */
+    .json-editor {
+      flex: 1; min-height: 200px; padding: 12px;
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+      color: var(--text-primary); background: var(--bg-tertiary);
+      border: none; resize: none; outline: none; tab-size: 2;
+    }
+
+    /* ── Footer ──────────────────────────────────── */
+    .editor-footer {
+      display: flex; justify-content: flex-end; gap: 8px;
+      padding: 8px 14px; background: var(--bg-secondary);
+      border-top: 1px solid var(--bg-hover); flex-shrink: 0;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 14px; font-size: 11px; font-weight: 500;
+      border: 1px solid var(--bg-active); border-radius: 4px;
+      background: var(--bg-surface); color: var(--text-secondary);
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+    }
+    .btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .btn.primary {
+      background: var(--accent-green); color: var(--bg-primary);
+      border-color: var(--accent-green); font-weight: 600;
+    }
+    .btn.primary:hover { filter: brightness(1.1); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="editor-header">
+    <span id="editor-title" class="editor-title">Edit Test Case</span>
+    <div class="td-editor-tabs">
+      <button class="td-editor-tab active" data-tab="testdata">Test Data</button>
+      <button class="td-editor-tab" data-tab="json">Raw JSON</button>
+    </div>
+    <button id="btn-close" class="close-btn" title="Close">✕</button>
+  </div>
+
+  <!-- Body -->
+  <div class="editor-body">
+    <!-- Test Data tab -->
+    <div id="td-tab-testdata" class="td-tab-content active">
+      <div class="td-table-wrap">
+        <table class="td-table">
+          <thead>
+            <tr>
+              <th class="td-col-key">Field</th>
+              <th class="td-col-val">Value</th>
+              <th class="td-col-type">Type</th>
+            </tr>
+          </thead>
+          <tbody id="td-table-body"></tbody>
+        </table>
+        <div id="td-empty" class="td-empty hidden">No test data — this test has no form inputs.</div>
+      </div>
+    </div>
+
+    <!-- Raw JSON tab -->
+    <div id="td-tab-json" class="td-tab-content">
+      <textarea id="json-editor" class="json-editor" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="editor-footer">
+    <button id="btn-save-replay" class="btn primary">Save &amp; Replay</button>
+    <button id="btn-save" class="btn">Save</button>
+    <button id="btn-cancel" class="btn">Cancel</button>
+  </div>
+
+  <script src="js/editor-window.js"></script>
+</body>
+</html>
