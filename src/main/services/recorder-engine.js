@@ -408,6 +408,19 @@ class RecorderEngine extends EventEmitter {
       return tc;
     });
 
+    // Keep raw page-level step data (full element info, all locators, test data)
+    const pageData = (flow.steps || []).map((step, index) => ({
+      stepIndex: index,
+      action: step.action,
+      type: step.type,
+      description: step.description || '',
+      url: step.url || '',
+      element: step.element || null,
+      locators: step.locators || [],
+      testData: step.testData || {},
+      wait: step.wait || null,
+    }));
+
     return {
       id:           flow.id,
       name:         flow.name || 'Untitled Test Case',
@@ -417,6 +430,7 @@ class RecorderEngine extends EventEmitter {
       testData,
       testDataMeta,
       steps,
+      pageData,
     };
   }
 }

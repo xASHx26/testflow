@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('testflow', {
     getUrl: () => ipcRenderer.invoke('browser:getUrl'),
     attachView: (bounds) => ipcRenderer.invoke('browser:attachView', bounds),
     updateBounds: (bounds) => ipcRenderer.invoke('browser:updateBounds', bounds),
+    hide: () => ipcRenderer.invoke('browser:hide'),
+    show: () => ipcRenderer.invoke('browser:show'),
     onNavigated: (callback) => ipcRenderer.on('browser:navigated', (_, url) => callback(url)),
   },
 

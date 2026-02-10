@@ -2,9 +2,11 @@
  * TestFlow — Test Case Manager
  *
  * Manages test case CRUD in the Replay Log tab.
- * Now features a proper Test Data Editor: form inputs recorded during a flow
- * are shown as an editable key-value table.  Editing a value changes the next
- * replay so the new data is used (different email, different dropdown, etc.).
+ * Features:
+ *  - Test Data Editor: editable key-value table for form inputs
+ *  - PageData viewer: raw per-step page data (elements, locators, values)
+ *  - BrowserView is hidden while the editor overlay is open so the overlay
+ *    isn't obscured by the native BrowserView window.
  */
 
 (function () {
@@ -146,6 +148,9 @@
       dataSummary = `<div class="testcase-data-preview">${escHtml(preview)}${tdKeys.length > 3 ? ` +${tdKeys.length - 3} more` : ''}</div>`;
     }
 
+    const hasPageData = tc.pageData && tc.pageData.length > 0;
+    const hasNetwork  = tc.networkLog && tc.networkLog.length > 0;
+
     card.innerHTML = `
       <div class="testcase-card-header">
         <span class="testcase-status-icon">${statusIcon}</span>
@@ -158,24 +163,14 @@
         ${tc.lastRun ? `<div class="testcase-lastrun">Last run: ${new Date(tc.lastRun).toLocaleTimeString()}</div>` : ''}
       </div>
       <div class="testcase-card-actions">
-        <button class="tc-btn tc-btn-play" data-action="play" title="Replay this test case">
-          <span class="icon icon-play"></span> Run
-        </button>
-        <button class="tc-btn tc-btn-edit" data-action="edit" title="Edit test data">
-          <span class="icon icon-edit"></span> Edit
-        </button>
-        <button class="tc-btn tc-btn-dup" data-action="duplicate" title="Duplicate">
-          <span class="icon icon-clipboard"></span> Dup
-        </button>
-        <button class="tc-btn tc-btn-download" data-action="download" title="Download JSON">
-          ↓ JSON
-        </button>
-        <button class="tc-btn tc-btn-download" data-action="view-network" title="View Network Log"${tc.networkLog && tc.networkLog.length ? '' : ' disabled'}>
-          👁 Network
-        </button>
-        <button class="tc-btn tc-btn-download" data-action="download-network" title="Download Network Log"${tc.networkLog && tc.networkLog.length ? '' : ' disabled'}>
-          ↓ Network
-        </button>
+        <button class="tc-btn tc-btn-play" data-action="play" title="Replay this test case">▶ Run</button>
+        <button class="tc-btn tc-btn-edit" data-action="edit" title="Edit test data">✏ Edit</button>
+        <button class="tc-btn tc-btn-dup" data-action="duplicate" title="Duplicate">⧉ Dup</button>
+        <button class="tc-btn tc-btn-download" data-action="download" title="Download test case JSON">↓ TestCase</button>
+        <button class="tc-btn tc-btn-pagedata" data-action="view-pagedata" title="View page data"${hasPageData ? '' : ' disabled'}>👁 PageData</button>
+        <button class="tc-btn tc-btn-pagedata" data-action="download-pagedata" title="Download page data"${hasPageData ? '' : ' disabled'}>↓ PageData</button>
+        <button class="tc-btn tc-btn-network" data-action="view-network" title="View network log"${hasNetwork ? '' : ' disabled'}>👁 Network</button>
+        <button class="tc-btn tc-btn-network" data-action="download-network" title="Download network log"${hasNetwork ? '' : ' disabled'}>↓ Network</button>
         <button class="tc-btn tc-btn-del" data-action="delete" title="Delete">✕</button>
       </div>
     `;
@@ -185,13 +180,15 @@
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const action = btn.dataset.action;
-      if (action === 'play') runTestCase(idx);
-      else if (action === 'edit') openEditor(idx);
-      else if (action === 'duplicate') duplicateTestCase(idx);
-      else if (action === 'download') downloadTestCase(idx);
-      else if (action === 'view-network') viewNetworkLog(idx);
-      else if (action === 'download-network') downloadNetworkLog(idx);
-      else if (action === 'delete') deleteTestCase(idx);
+      if (action === 'play')              runTestCase(idx);
+      else if (action === 'edit')         openEditor(idx);
+      else if (action === 'duplicate')    duplicateTestCase(idx);
+      else if (action === 'download')     downloadTestCase(idx);
+      else if (action === 'view-pagedata')     viewPageData(idx);
+      else if (action === 'download-pagedata') downloadPageData(idx);
+      else if (action === 'view-network')      viewNetworkLog(idx);
+      else if (action === 'download-network')  downloadNetworkLog(idx);
+      else if (action === 'delete')       deleteTestCase(idx);
     });
 
     // Double-click name to rename inline
@@ -227,12 +224,25 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  //  Browser hide/show helpers for overlay visibility
+  // ──────────────────────────────────────────────────────────────
+  function hideBrowserView() {
+    window.testflow?.browser?.hide?.();
+  }
+  function showBrowserView() {
+    window.testflow?.browser?.show?.();
+  }
+
+  // ──────────────────────────────────────────────────────────────
   //  Test Data Editor
   // ──────────────────────────────────────────────────────────────
   function openEditor(idx) {
     editingIndex = idx;
     const tc = testCases[idx];
     if (!tc) return;
+
+    // Hide the BrowserView so the overlay isn't behind it
+    hideBrowserView();
 
     // Update header
     if (editorNameEl) editorNameEl.textContent = tc.name || 'Edit Test Case';
@@ -378,6 +388,8 @@
   function closeEditor() {
     editorOverlay.classList.add('hidden');
     editingIndex = -1;
+    // Restore the BrowserView
+    showBrowserView();
   }
 
   function saveEdits(andReplay) {
@@ -420,6 +432,47 @@
     const a = document.createElement('a');
     a.href = url;
     a.download = (tc.name || 'testcase').replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  PageData — raw per-step element/locator/value data
+  // ──────────────────────────────────────────────────────────────
+  function viewPageData(idx) {
+    const tc = testCases[idx];
+    if (!tc || !tc.pageData || tc.pageData.length === 0) return;
+
+    // Hide browser so the overlay is visible
+    hideBrowserView();
+
+    editingIndex = idx;
+    if (editorNameEl) editorNameEl.textContent = (tc.name || 'Test Case') + ' — Page Data';
+
+    // Show only the JSON tab with pageData content
+    document.querySelectorAll('.td-editor-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.td-tab-content').forEach(c => c.classList.remove('active'));
+    const jsonTab  = document.querySelector('.td-editor-tab[data-tab="json"]');
+    const jsonPane = document.getElementById('td-tab-json');
+    if (jsonTab) jsonTab.classList.add('active');
+    if (jsonPane) jsonPane.classList.add('active');
+    activeEditorTab = 'json';
+
+    jsonEditor.value = JSON.stringify(tc.pageData, null, 2);
+    editorOverlay.classList.remove('hidden');
+  }
+
+  function downloadPageData(idx) {
+    const tc = testCases[idx];
+    if (!tc || !tc.pageData || tc.pageData.length === 0) return;
+    const json = JSON.stringify(tc.pageData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (tc.name || 'testcase').replace(/[^a-zA-Z0-9_-]/g, '_') + '_pagedata.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
