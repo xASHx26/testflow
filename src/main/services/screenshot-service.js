@@ -18,11 +18,11 @@ class ScreenshotService {
   async capture(browserEngine, options = {}) {
     const buffer = await browserEngine.captureScreenshot();
     const name = options.name || this._generateName(browserEngine.getCurrentUrl());
-    const relativePath = this.projectManager.saveScreenshot(buffer, name);
+    const absolutePath = this.projectManager.saveScreenshot(buffer, name);
 
     return {
-      path: relativePath,
-      absolutePath: path.join(this.projectManager.getProjectPath(), relativePath),
+      path: absolutePath,
+      absolutePath,
       name,
       timestamp: Date.now(),
       url: browserEngine.getCurrentUrl(),

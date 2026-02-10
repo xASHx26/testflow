@@ -26,20 +26,29 @@ function registerIpcHandlers(context) {
 
   // ─── Project Management ──────────────────────────────────────
   ipcMain.handle('project:new', async (event, name) => {
-    const result = await dialog.showOpenDialog(windowManager.getMainWindow(), {
-      properties: ['openDirectory', 'createDirectory'],
-      title: 'Choose Project Location',
+    const result = await dialog.showSaveDialog(windowManager.getMainWindow(), {
+      title: 'Create New TestFlow Project',
+      defaultPath: `${name || 'My Project'}.taf`,
+      filters: [
+        { name: 'TestFlow Project', extensions: ['taf'] },
+      ],
     });
-    if (result.canceled) return null;
-    return projectManager.createProject(name, result.filePaths[0]);
+    if (result.canceled || !result.filePath) return null;
+
+    // Derive project name from chosen filename
+    const projectName = name || path.basename(result.filePath, '.taf');
+    return projectManager.createProject(projectName, result.filePath);
   });
 
   ipcMain.handle('project:open', async () => {
     const result = await dialog.showOpenDialog(windowManager.getMainWindow(), {
-      properties: ['openDirectory'],
       title: 'Open TestFlow Project',
+      filters: [
+        { name: 'TestFlow Project', extensions: ['taf'] },
+      ],
+      properties: ['openFile'],
     });
-    if (result.canceled) return null;
+    if (result.canceled || !result.filePaths.length) return null;
     return projectManager.openProject(result.filePaths[0]);
   });
 
@@ -365,7 +374,7 @@ function registerIpcHandlers(context) {
 
     if (result.canceled) return null;
     return shareService.createPackage(
-      projectManager.getProjectPath(),
+      projectManager.getProjectDir(),
       result.filePath,
       mode
     );

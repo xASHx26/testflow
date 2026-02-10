@@ -60,12 +60,13 @@ class App {
     if (!name) return;
 
     try {
-      const project = await window.testflow.project.new(name);
+      const result = await window.testflow.project.new(name);
+      if (!result) return; // user cancelled save dialog
       this.projectLoaded = true;
-      window.EventBus.emit('project:opened', project);
+      window.EventBus.emit('project:opened', result);
       window.EventBus.emit('console:log', {
         level: 'info',
-        message: `Project created: ${project.name}`,
+        message: `✅ Project created: ${result.project.name} — ${result.path}`,
         timestamp: Date.now()
       });
     } catch (err) {
@@ -75,16 +76,15 @@ class App {
 
   async _openProject() {
     try {
-      const project = await window.testflow.project.open();
-      if (project) {
-        this.projectLoaded = true;
-        window.EventBus.emit('project:opened', project);
-        window.EventBus.emit('console:log', {
-          level: 'info',
-          message: `Project opened: ${project.name}`,
-          timestamp: Date.now()
-        });
-      }
+      const result = await window.testflow.project.open();
+      if (!result) return; // user cancelled open dialog
+      this.projectLoaded = true;
+      window.EventBus.emit('project:opened', result);
+      window.EventBus.emit('console:log', {
+        level: 'info',
+        message: `✅ Project opened: ${result.project.name} — ${result.path}`,
+        timestamp: Date.now()
+      });
     } catch (err) {
       alert(`Failed to open project: ${err.message}`);
     }

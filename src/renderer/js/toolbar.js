@@ -295,13 +295,18 @@ class Toolbar {
 
   // ─── Export ───────────────────────────────────────────────
   async _export(format, label) {
+    // Guard: project must be open
     if (!window.App?.projectLoaded) {
-      this._log('warning', `Export ${label}: No project open — create or open a project first.`);
+      alert(`Export ${label}: No project open.\n\nCreate or open a project first.`);
+      this._log('warning', `Export ${label}: No project open.`);
       return;
     }
+
+    // Guard: a flow must be selected
     const flowId = window.FlowEditor?.activeFlowId;
     if (!flowId) {
-      this._log('warning', `Export ${label}: No flow selected — create or select a flow first.`);
+      alert(`Export ${label}: No flow selected.\n\nCreate or select a flow first.`);
+      this._log('warning', `Export ${label}: No flow selected.`);
       return;
     }
 
@@ -309,10 +314,9 @@ class Toolbar {
     try {
       const validation = await window.testflow.export.validate(flowId);
       if (!validation.valid) {
-        this._log('error', `Export ${label} failed — validation errors:`);
-        for (const err of validation.errors) {
-          this._log('error', `  • ${err}`);
-        }
+        const msg = validation.errors.join('\n• ');
+        alert(`Export ${label} — validation failed:\n\n• ${msg}`);
+        this._log('error', `Export ${label} validation failed: ${validation.errors.join(', ')}`);
         return;
       }
       if (validation.warnings.length) {
@@ -321,6 +325,7 @@ class Toolbar {
         }
       }
     } catch (err) {
+      alert(`Export ${label} — validation error:\n\n${err.message}`);
       this._log('error', `Export validation error: ${err.message}`);
       return;
     }
@@ -366,10 +371,8 @@ class Toolbar {
       window.EventBus.emit('export:complete', { format, result });
 
     } catch (err) {
+      alert(`Export ${label} failed:\n\n${err.message}`);
       this._log('error', `Export ${label} failed: ${err.message}`);
-      if (err.errors) {
-        for (const e of err.errors) this._log('error', `  • ${e}`);
-      }
     }
   }
 
