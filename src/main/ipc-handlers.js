@@ -26,9 +26,10 @@ function registerIpcHandlers(context) {
 
   // ─── Project Management ──────────────────────────────────────
   ipcMain.handle('project:new', async (event, name) => {
+    const defaultName = name || 'My Project';
     const result = await dialog.showSaveDialog(windowManager.getMainWindow(), {
       title: 'Create New TestFlow Project',
-      defaultPath: `${name || 'My Project'}.taf`,
+      defaultPath: `${defaultName}.taf`,
       filters: [
         { name: 'TestFlow Project', extensions: ['taf'] },
       ],
@@ -36,8 +37,16 @@ function registerIpcHandlers(context) {
     if (result.canceled || !result.filePath) return null;
 
     // Derive project name from chosen filename
-    const projectName = name || path.basename(result.filePath, '.taf');
-    return projectManager.createProject(projectName, result.filePath);
+    const projectName = path.basename(result.filePath, '.taf');
+    const project = projectManager.createProject(projectName, result.filePath);
+
+    // Persist any in-memory flows (recorded before project was created)
+    const persisted = flowEngine.persistAllFlows();
+    if (persisted > 0) {
+      console.log(`[TestFlow] Persisted ${persisted} in-memory flow(s) to new project`);
+    }
+
+    return project;
   });
 
   ipcMain.handle('project:open', async () => {
@@ -49,7 +58,15 @@ function registerIpcHandlers(context) {
       properties: ['openFile'],
     });
     if (result.canceled || !result.filePaths.length) return null;
-    return projectManager.openProject(result.filePaths[0]);
+    const project = projectManager.openProject(result.filePaths[0]);
+
+    // Persist any in-memory flows
+    const persisted = flowEngine.persistAllFlows();
+    if (persisted > 0) {
+      console.log(`[TestFlow] Persisted ${persisted} in-memory flow(s) to opened project`);
+    }
+
+    return project;
   });
 
   ipcMain.handle('project:save', async () => {

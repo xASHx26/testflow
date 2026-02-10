@@ -284,6 +284,24 @@ class FlowEngine {
       this.projectManager.saveTestData(flow.id, flow.testData);
     }
   }
+
+  /**
+   * Persist ALL in-memory flows to disk.
+   * Called after a project is created/opened to save any flows that were
+   * recorded before the project existed.
+   */
+  persistAllFlows() {
+    if (!this.projectManager.getProjectPath()) return 0;
+    let count = 0;
+    for (const flow of this.flows.values()) {
+      this.projectManager.saveFlow(flow);
+      if (flow.testData && Object.keys(flow.testData).length > 0) {
+        this.projectManager.saveTestData(flow.id, flow.testData);
+      }
+      count++;
+    }
+    return count;
+  }
 }
 
 module.exports = { FlowEngine };

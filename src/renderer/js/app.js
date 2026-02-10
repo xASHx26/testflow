@@ -56,17 +56,14 @@ class App {
   }
 
   async _newProject() {
-    const name = prompt('Project name:', 'My Test Project');
-    if (!name) return;
-
     try {
-      const result = await window.testflow.project.new(name);
+      const result = await window.testflow.project.new();
       if (!result) return; // user cancelled save dialog
       this.projectLoaded = true;
       window.EventBus.emit('project:opened', result);
       window.EventBus.emit('console:log', {
         level: 'info',
-        message: `✅ Project created: ${result.project.name} — ${result.path}`,
+        message: `✅ Project created: ${result.project.name}`,
         timestamp: Date.now()
       });
     } catch (err) {
@@ -82,7 +79,7 @@ class App {
       window.EventBus.emit('project:opened', result);
       window.EventBus.emit('console:log', {
         level: 'info',
-        message: `✅ Project opened: ${result.project.name} — ${result.path}`,
+        message: `✅ Project opened: ${result.project.name}`,
         timestamp: Date.now()
       });
     } catch (err) {
@@ -91,6 +88,10 @@ class App {
   }
 
   async _saveProject() {
+    if (!this.projectLoaded) {
+      // No project yet — auto-trigger New Project to save everything
+      return this._newProject();
+    }
     try {
       await window.testflow.project.save();
       window.EventBus.emit('console:log', {

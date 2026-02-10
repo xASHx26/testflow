@@ -295,11 +295,13 @@ class Toolbar {
 
   // ─── Export ───────────────────────────────────────────────
   async _export(format, label) {
-    // Guard: project must be open
+    // Guard: project must be open — offer to create one
     if (!window.App?.projectLoaded) {
-      alert(`Export ${label}: No project open.\n\nCreate or open a project first.`);
-      this._log('warning', `Export ${label}: No project open.`);
-      return;
+      const create = confirm(`Export ${label}: No project open.\n\nWould you like to create a project now?\n(Your recorded flows will be saved to the new project)`);
+      if (create) {
+        await window.App._newProject();
+      }
+      if (!window.App?.projectLoaded) return; // still no project
     }
 
     // Guard: a flow must be selected
