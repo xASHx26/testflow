@@ -149,6 +149,17 @@
       else if (action === 'delete') deleteTestCase(idx);
     });
 
+    // Double-click name to rename inline
+    const nameEl = card.querySelector('.testcase-name');
+    if (nameEl) {
+      nameEl.title = 'Double-click to rename';
+      nameEl.style.cursor = 'text';
+      nameEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startInlineRename(idx, nameEl);
+      });
+    }
+
     return card;
   }
 
@@ -261,6 +272,47 @@
   function deleteTestCase(idx) {
     testCases.splice(idx, 1);
     render();
+  }
+
+  // ─── Inline Rename ──────────────────────────────────────────
+  function startInlineRename(idx, nameEl) {
+    const tc = testCases[idx];
+    if (!tc) return;
+
+    const currentName = tc.name || 'Test Case';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'testcase-rename-input';
+    input.value = currentName;
+
+    // Replace the span with the input
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let committed = false;
+
+    function commit() {
+      if (committed) return;
+      committed = true;
+      const newName = input.value.trim();
+      if (newName && newName !== currentName) {
+        tc.name = newName;
+      }
+      render();
+    }
+
+    function cancel() {
+      if (committed) return;
+      committed = true;
+      render();
+    }
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', () => commit());
   }
 
   function updateLatestStatus(data) {
