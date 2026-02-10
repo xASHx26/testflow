@@ -1,0 +1,89 @@
+/* ═══════════════════════════════════════════════════
+   TestFlow — Theme Variables (Catppuccin Mocha-inspired)
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* Base Colors */
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #181825;
+  --bg-tertiary: #11111b;
+  --bg-surface: #252536;
+  --bg-elevated: #2a2a3c;
+  --bg-hover: #313244;
+  --bg-active: #45475a;
+
+  /* Text Colors */
+  --text-primary: #cdd6f4;
+  --text-secondary: #a6adc8;
+  --text-muted: #6c7086;
+  --text-dim: #585b70;
+
+  /* Accent Colors */
+  --accent-blue: #89b4fa;
+  --accent-sky: #89dceb;
+  --accent-teal: #94e2d5;
+  --accent-green: #a6e3a1;
+  --accent-yellow: #f9e2af;
+  --accent-peach: #fab387;
+  --accent-red: #f38ba8;
+  --accent-pink: #f5c2e7;
+  --accent-mauve: #cba6f7;
+  --accent-lavender: #b4befe;
+
+  /* Semantic Colors */
+  --color-record: #f38ba8;
+  --color-record-glow: rgba(243, 139, 168, 0.3);
+  --color-replay: #a6e3a1;
+  --color-freeze: #89dceb;
+  --color-freeze-glow: rgba(137, 220, 235, 0.3);
+  --color-warning: #f9e2af;
+  --color-error: #f38ba8;
+  --color-success: #a6e3a1;
+  --color-info: #89b4fa;
+
+  /* Borders */
+  --border-color: #313244;
+  --border-light: #45475a;
+  --border-focus: #89b4fa;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+
+  /* Font */
+  --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  --font-emoji: 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'Twemoji Mozilla', emoji;
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* Transitions */
+  --transition-fast: 0.1s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+
+  /* Layout */
+  --toolbar-height: 48px;
+  --panel-left-width: 300px;
+  --panel-right-width: 320px;
+  --panel-bottom-height: 200px;
+  --panel-min-width: 200px;
+}

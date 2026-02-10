@@ -1,0 +1,100 @@
+{
+  "name": "testflow-flow",
+  "version": "1.0.0",
+  "description": "TestFlow flow schema — JSON is the source of truth for execution",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "created": { "type": "string", "format": "date-time" },
+    "modified": { "type": "string", "format": "date-time" },
+    "baseUrl": { "type": "string", "format": "uri" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/step" }
+    },
+    "testData": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/testDataEntry" }
+    }
+  },
+  "required": ["id", "name", "steps"],
+  "definitions": {
+    "step": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "order": { "type": "integer", "minimum": 1 },
+        "action": {
+          "type": "string",
+          "enum": ["navigate", "click", "type", "select", "check", "radio", "submit", "scroll", "slider", "hover"]
+        },
+        "description": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true },
+        "group": { "type": "string" },
+        "element": { "$ref": "#/definitions/elementInfo" },
+        "locators": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/locator" }
+        },
+        "testData": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/testDataEntry" }
+        },
+        "wait": { "$ref": "#/definitions/waitConfig" },
+        "screenshot": { "type": "string" }
+      },
+      "required": ["id", "order", "action"]
+    },
+    "locator": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["id", "name", "css", "xpath", "text-xpath", "aria-label", "role", "label", "placeholder", "data-attribute", "relative-xpath"]
+        },
+        "value": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["strategy", "value", "confidence"]
+    },
+    "elementInfo": {
+      "type": "object",
+      "properties": {
+        "tag": { "type": "string" },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "classes": { "type": "string" },
+        "text": { "type": "string" },
+        "type": { "type": "string" },
+        "role": { "type": "string" },
+        "ariaLabel": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "value": { "type": "string" },
+        "dataTestId": { "type": "string" }
+      }
+    },
+    "testDataEntry": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" },
+        "source": { "type": "string", "enum": ["recorded", "manual", "imported"] }
+      },
+      "required": ["key", "value"]
+    },
+    "waitConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["visibility", "clickable", "present", "none"]
+        },
+        "timeout": { "type": "number", "default": 10000 },
+        "customSelector": { "type": "string" }
+      }
+    }
+  }
+}

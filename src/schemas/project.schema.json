@@ -1,0 +1,37 @@
+{
+  "name": "testflow-project",
+  "version": "1.0.0",
+  "description": "TestFlow project schema",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": "string", "default": "1.0.0" },
+    "description": { "type": "string" },
+    "created": { "type": "string", "format": "date-time" },
+    "modified": { "type": "string", "format": "date-time" },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "defaultTimeout": { "type": "number", "default": 10000 },
+        "screenshotOnError": { "type": "boolean", "default": true },
+        "defaultBrowser": { "type": "string", "default": "chromium" }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/flowRef" }
+    }
+  },
+  "definitions": {
+    "flowRef": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "file": { "type": "string" }
+      },
+      "required": ["id", "name", "file"]
+    }
+  },
+  "required": ["name", "version", "created"]
+}

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TestFlow — Mini Inspector</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, sans-serif;
+      font-size: 12px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      overflow: hidden;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+    }
+
+    .header h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: #89b4fa;
+    }
+
+    .header .close-btn {
+      -webkit-app-region: no-drag;
+      background: none;
+      border: none;
+      color: #6c7086;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .header .close-btn:hover { background: #45475a; color: #f38ba8; }
+
+    .content {
+      padding: 8px 10px;
+      overflow-y: auto;
+      height: calc(100vh - 36px);
+      -webkit-app-region: no-drag;
+    }
+
+    .element-tag {
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #f38ba8;
+      padding: 4px 0;
+      word-break: break-all;
+    }
+
+    .section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6c7086;
+      margin: 10px 0 4px;
+      padding-bottom: 2px;
+      border-bottom: 1px solid #313244;
+    }
+
+    .prop-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .prop-table td {
+      padding: 2px 4px;
+      font-size: 11px;
+      border-bottom: 1px solid #1e1e2e;
+    }
+    .prop-table td:first-child {
+      color: #a6adc8;
+      width: 80px;
+      white-space: nowrap;
+    }
+    .prop-table td:last-child {
+      color: #cdd6f4;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 10px;
+      word-break: break-all;
+    }
+
+    .locator-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      border-bottom: 1px solid #1e1e2e;
+    }
+
+    .loc-strategy {
+      background: #313244;
+      color: #89b4fa;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .loc-value {
+      flex: 1;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 10px;
+      color: #a6e3a1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .loc-pct {
+      font-size: 10px;
+      color: #f9e2af;
+    }
+
+    .copy-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 2px;
+      opacity: 0.5;
+    }
+    .copy-btn:hover { opacity: 1; }
+
+    .empty {
+      text-align: center;
+      color: #6c7086;
+      padding: 30px 10px;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h3>🔍 Mini Inspector</h3>
+    <button class="close-btn" id="btn-close">&times;</button>
+  </div>
+
+  <div class="content" id="content">
+    <div class="empty">Hover over an element in the browser to inspect it.</div>
+  </div>
+
+  <script>
+    const content = document.getElementById('content');
+    const btnClose = document.getElementById('btn-close');
+
+    btnClose.addEventListener('click', () => {
+      window.close();
+    });
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+
+    function renderElement(data) {
+      if (!data) {
+        content.innerHTML = '<div class="empty">Hover over an element in the browser to inspect it.</div>';
+        return;
+      }
+
+      let html = '';
+
+      // Tag
+      html += `<div class="element-tag">&lt;${esc(data.tag)}`;
+      if (data.id) html += ` id="${esc(data.id)}"`;
+      if (data.classes) html += ` class="${esc(data.classes)}"`;
+      html += '&gt;</div>';
+
+      // Properties
+      html += '<div class="section-title">Properties</div>';
+      html += '<table class="prop-table">';
+      const props = [
+        ['Tag', data.tag],
+        ['ID', data.id],
+        ['Name', data.name],
+        ['Classes', data.classes],
+        ['Role', data.role],
+        ['Aria Label', data.ariaLabel],
+        ['Text', data.text ? data.text.substring(0, 100) : ''],
+        ['Type', data.type],
+        ['Value', data.value],
+        ['Placeholder', data.placeholder],
+        ['Size', data.rect ? `${Math.round(data.rect.width)}×${Math.round(data.rect.height)}` : '']
+      ];
+      props.forEach(([k, v]) => {
+        if (v) html += `<tr><td>${k}</td><td>${esc(v)}</td></tr>`;
+      });
+      html += '</table>';
+
+      // Locators
+      if (data.locators && data.locators.length > 0) {
+        html += '<div class="section-title">Locators</div>';
+        const sorted = [...data.locators].sort((a, b) => b.confidence - a.confidence);
+        sorted.forEach(loc => {
+          const pct = Math.round(loc.confidence * 100);
+          html += `
+            <div class="locator-item">
+              <span class="loc-strategy">${esc(loc.strategy)}</span>
+              <span class="loc-value" title="${esc(loc.value)}">${esc(loc.value)}</span>
+              <span class="loc-pct">${pct}%</span>
+              <button class="copy-btn" data-value="${esc(loc.value)}">📋</button>
+            </div>
+          `;
+        });
+      }
+
+      content.innerHTML = html;
+
+      // Copy buttons
+      content.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(btn.dataset.value);
+          btn.textContent = '✅';
+          setTimeout(() => btn.textContent = '📋', 1500);
+        });
+      });
+    }
+
+    // Listen for inspector events via preload
+    if (window.testflow) {
+      window.testflow.on('inspector:hover', renderElement);
+      window.testflow.on('inspector:select', renderElement);
+    }
+  </script>
+</body>
+</html>

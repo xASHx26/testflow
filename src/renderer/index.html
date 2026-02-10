@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TestFlow — Test Automation IDE</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <link rel="stylesheet" href="styles/icons.css">
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/panels.css">
+  <link rel="stylesheet" href="styles/inspector.css">
+  <link rel="stylesheet" href="styles/testcase.css">
+</head>
+<body>
+  <!-- ─── Top Toolbar ──────────────────────────────────────── -->
+  <header id="toolbar" class="toolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-brand">
+        <span class="brand-icon"><span class="icon icon-lg icon-hexagon"></span></span>
+        <span class="brand-name">TestFlow</span>
+      </div>
+
+      <!-- Navigation Controls -->
+      <div class="toolbar-group nav-controls">
+        <button id="btn-back" class="toolbar-btn" title="Back (Alt+Left)"><span class="icon icon-back"></span></button>
+        <button id="btn-forward" class="toolbar-btn" title="Forward (Alt+Right)"><span class="icon icon-forward"></span></button>
+        <button id="btn-reload" class="toolbar-btn" title="Reload (F5)"><span class="icon icon-reload"></span></button>
+      </div>
+
+      <!-- URL Bar -->
+      <div class="url-bar">
+        <span class="url-icon"><span class="icon icon-sm icon-lock"></span></span>
+        <input id="url-input" type="text" placeholder="Enter URL to test..." spellcheck="false">
+        <button id="btn-navigate" class="url-go-btn">Go</button>
+      </div>
+    </div>
+
+    <div class="toolbar-center">
+      <!-- Recording Controls -->
+      <div class="toolbar-group recording-controls">
+        <button id="btn-record" class="toolbar-btn record-btn" title="Start Recording (F2)">
+          <span class="btn-icon"><span class="icon icon-record"></span></span>
+          <span class="btn-label">Record</span>
+        </button>
+        <button id="btn-stop" class="toolbar-btn stop-btn" title="Stop Recording (Shift+F2)" disabled>
+          <span class="btn-icon"><span class="icon icon-stop"></span></span>
+          <span class="btn-label">Stop</span>
+        </button>
+        <button id="btn-pause" class="toolbar-btn" title="Pause/Resume (F3)" disabled>
+          <span class="btn-icon"><span class="icon icon-pause"></span></span>
+          <span class="btn-label">Pause</span>
+        </button>
+      </div>
+
+      <div class="toolbar-separator"></div>
+
+      <!-- Replay Controls -->
+      <div class="toolbar-group replay-controls">
+        <button id="btn-replay" class="toolbar-btn replay-btn" title="Replay Flow (F5)">
+          <span class="btn-icon"><span class="icon icon-play"></span></span>
+          <span class="btn-label">Replay</span>
+        </button>
+        <button id="btn-replay-step" class="toolbar-btn" title="Step Over (F10)">
+          <span class="btn-icon"><span class="icon icon-step-forward"></span></span>
+          <span class="btn-label">Step</span>
+        </button>
+        <button id="btn-replay-stop" class="toolbar-btn" title="Stop Replay (Shift+F5)" disabled>
+          <span class="btn-icon"><span class="icon icon-stop"></span></span>
+        </button>
+      </div>
+
+      <div class="toolbar-separator"></div>
+
+      <!-- Element Inspector Toggle -->
+      <div class="toolbar-group">
+        <button id="btn-inspector" class="toolbar-btn" title="Element Inspector (Ctrl+Shift+E)">
+          <span class="btn-icon"><span class="icon icon-crosshair"></span></span>
+          <span class="btn-label">Inspect</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <!-- Tool Buttons -->
+      <div class="toolbar-group">
+        <button id="btn-freeze" class="toolbar-btn" title="Freeze Website (F4)">
+          <span class="btn-icon"><span class="icon icon-freeze"></span></span>
+          <span class="btn-label">Freeze</span>
+        </button>
+        <button id="btn-screenshot" class="toolbar-btn" title="Screenshot (Ctrl+Shift+S)">
+          <span class="btn-icon"><span class="icon icon-camera"></span></span>
+        </button>
+        <button id="btn-mini-inspector" class="toolbar-btn" title="Mini Inspector (Ctrl+Shift+I)">
+          <span class="btn-icon"><span class="icon icon-search"></span></span>
+        </button>
+      </div>
+
+      <div class="toolbar-separator"></div>
+
+      <!-- Workspace Presets -->
+      <div class="toolbar-group">
+        <select id="workspace-preset" class="toolbar-select" title="Workspace Preset">
+          <option value="recorder">Recorder</option>
+          <option value="inspector">Inspector</option>
+          <option value="debug" selected>Debug</option>
+          <option value="review">Review</option>
+        </select>
+      </div>
+
+      <!-- Status Indicator -->
+      <div id="status-indicator" class="status-indicator">
+        <span class="status-dot idle"></span>
+        <span class="status-text">Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── Main Workspace ───────────────────────────────────── -->
+  <main id="workspace" class="workspace">
+    <!-- Left Sidebar: Flow List + Flow Editor -->
+    <aside id="panel-left" class="panel panel-left">
+      <div class="panel-header">
+        <span class="panel-title">Test Flows</span>
+        <div class="panel-actions">
+          <button id="btn-new-flow" class="panel-btn" title="New Flow">+</button>
+        </div>
+      </div>
+
+      <!-- Flow List -->
+      <div id="flow-list" class="flow-list">
+        <div class="empty-state">
+          <span class="empty-icon"><span class="icon icon-2xl icon-clipboard"></span></span>
+          <p>No flows yet</p>
+          <p class="empty-hint">Start recording or create a new flow</p>
+        </div>
+      </div>
+
+      <!-- Flow Steps -->
+      <div class="panel-header" style="margin-top:4px;">
+        <span class="panel-title">Steps</span>
+        <span id="step-count" class="badge">0</span>
+      </div>
+      <div id="flow-steps" class="flow-steps">
+        <div class="empty-state">
+          <span class="empty-icon"><span class="icon icon-2xl icon-edit"></span></span>
+          <p>No steps recorded</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Resize handle: left ↔ browser -->
+    <div class="resize-handle resize-handle-v" data-resize="left"></div>
+
+    <!-- Center: Browser View Area -->
+    <section id="panel-browser" class="panel panel-browser">
+      <div id="browser-container" class="browser-container">
+        <div id="browser-placeholder" class="browser-placeholder">
+          <div class="placeholder-content">
+            <span class="placeholder-icon"><span class="icon icon-3xl icon-globe"></span></span>
+            <h2>TestFlow Browser</h2>
+            <p>Enter a URL above to start testing</p>
+            <div class="quick-actions">
+              <button class="quick-action-btn" data-url="https://www.google.com">Google</button>
+              <button class="quick-action-btn" data-url="https://the-internet.herokuapp.com">The Internet (Test Site)</button>
+              <button class="quick-action-btn" data-url="https://demoqa.com">DemoQA</button>
+            </div>
+          </div>
+        </div>
+        <!-- Freeze indicator overlay -->
+        <div id="freeze-overlay" class="freeze-overlay hidden">
+          <span class="freeze-badge"><span class="icon icon-sm icon-freeze" style="background-color:#1e1e2e"></span> FROZEN</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Resize handle: browser ↔ right -->
+    <div class="resize-handle resize-handle-v" data-resize="right"></div>
+
+    <!-- Right Sidebar: Inspector + Test Data (hidden by default) -->
+    <aside id="panel-right" class="panel panel-right hidden">
+      <div class="panel-tabs">
+        <button class="panel-tab active" data-tab="inspector">Inspector</button>
+        <button class="panel-tab" data-tab="testdata">Test Data</button>
+      </div>
+
+      <!-- Inspector Tab (elements + locators combined) -->
+      <div id="tab-inspector" class="tab-content active">
+        <div id="inspector-content" class="inspector-content"></div>
+        <div id="locator-list" class="locator-list"></div>
+      </div>
+
+      <!-- Test Data Tab -->
+      <div id="tab-testdata" class="tab-content">
+        <div id="testdata-content" class="testdata-content"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Resize handle: workspace ↔ bottom -->
+  <div class="resize-handle resize-handle-h" data-resize="bottom"></div>
+
+  <!-- ─── Bottom Panel: Console + Network ──────────────────── -->
+  <footer id="panel-bottom" class="panel panel-bottom">
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-tab="console">Console</button>
+      <button class="panel-tab" data-tab="network">Network</button>
+      <button class="panel-tab" data-tab="replay-log">Replay Log</button>
+      <div class="panel-tab-spacer"></div>
+      <button id="btn-clear-console" class="panel-btn" title="Clear">✕</button>
+      <button id="btn-toggle-bottom" class="panel-btn" title="Toggle Panel">▼</button>
+    </div>
+
+    <!-- Console Tab -->
+    <div id="tab-console" class="tab-content bottom-tab active">
+      <div id="console-output" class="console-output"></div>
+    </div>
+
+    <!-- Network Tab -->
+    <div id="tab-network" class="tab-content bottom-tab">
+      <div id="network-output" class="network-output">
+        <table class="network-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>URL</th>
+              <th>Status</th>
+              <th>Type</th>
+              <th>Size</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="network-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Replay Log Tab -->
+    <div id="tab-replay-log" class="tab-content bottom-tab">
+      <div class="replay-split">
+        <!-- Left: Test Cases -->
+        <div class="replay-split-left">
+          <div class="replay-pane-header">
+            <span class="replay-pane-label">Test Cases</span>
+            <button id="btn-replay-all" class="replay-log-btn" title="Replay All">
+              <span class="icon icon-play"></span> Run All
+            </button>
+            <button id="btn-clear-testcases" class="replay-log-btn" title="Clear All">✕</button>
+          </div>
+          <div id="testcase-list" class="testcase-list"></div>
+        </div>
+        <!-- Resize handle -->
+        <div class="replay-split-divider"></div>
+        <!-- Right: Replay Log -->
+        <div class="replay-split-right">
+          <div class="replay-pane-header">
+            <span class="replay-pane-label">Log</span>
+            <button id="btn-clear-replay-log" class="replay-log-btn" title="Clear Log">✕</button>
+          </div>
+          <div id="replay-log-output" class="replay-log-output"></div>
+        </div>
+      </div>
+      <div id="testcase-editor-overlay" class="testcase-editor-overlay hidden">
+        <div class="testcase-editor-container">
+          <div class="testcase-editor-header">
+            <span>Edit Test Case JSON</span>
+            <button id="btn-close-editor" class="modal-close-btn">✕</button>
+          </div>
+          <textarea id="testcase-json-editor" class="testcase-json-editor" spellcheck="false"></textarea>
+          <div class="testcase-editor-footer">
+            <button id="btn-save-testcase" class="replay-log-btn primary">Save & Replay</button>
+            <button id="btn-cancel-testcase" class="replay-log-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ─── Modals ───────────────────────────────────────────── -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal-container" class="modal-container">
+      <div class="modal-header">
+        <span id="modal-title" class="modal-title"></span>
+        <button id="modal-close" class="modal-close-btn">✕</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-footer" class="modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- ─── Scripts ──────────────────────────────────────────── -->
+  <script src="js/event-bus.js"></script>
+  <script src="js/panel-manager.js"></script>
+  <script src="js/toolbar.js"></script>
+  <script src="js/flow-editor.js"></script>
+  <script src="js/inspector-ui.js"></script>
+  <script src="js/console-panel.js"></script>
+  <script src="js/network-panel.js"></script>
+  <script src="js/testcase-manager.js"></script>
+  <script src="js/mini-inspector.js"></script>
+  <script src="js/workspace.js"></script>
+  <script src="components/modal.js"></script>
+  <script src="components/step-card.js"></script>
+  <script src="components/locator-card.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
