@@ -19,57 +19,87 @@
       this.active = true;
       this.paused = false;
       this._attachListeners();
-      console.log('[TestFlow] Recorder started');
+      this._startModalObserver();
+      console.log('[TestFlow] Recorder started (v2)');
     },
 
     stop() {
       this.active = false;
       this.paused = false;
       this._detachListeners();
+      this._stopModalObserver();
       console.log('[TestFlow] Recorder stopped');
     },
 
     pause() {
       this.paused = true;
-      console.log('[TestFlow] Recorder paused');
     },
 
     resume() {
       this.paused = false;
-      console.log('[TestFlow] Recorder resumed');
     },
 
-    // ─── Event Handlers ──────────────────────────────────────
+    // ─── State & Event Handlers ──────────────────────────────
     _handlers: {},
+    _valueBefore: new WeakMap(),
+    _hoverTimers: new WeakMap(),
+    _dragSource: null,
+    _modalObserver: null,
 
     _attachListeners() {
-      // Click — capture on mouseup for intent (after click completes)
+      // Focusin — capture value_before for any form element
+      this._handlers.focusin = (e) => this._handleFocusIn(e);
+      document.addEventListener('focusin', this._handlers.focusin, true);
+
+      // Click
       this._handlers.click = (e) => this._handleClick(e);
       document.addEventListener('click', this._handlers.click, true);
 
-      // Input — capture typed values (debounced)
+      // Input — typed values (debounced)
       this._handlers.input = this._debounce((e) => this._handleInput(e), 500);
       document.addEventListener('input', this._handlers.input, true);
 
-      // Change — capture select, checkbox, radio, range
+      // Change — select, checkbox, radio, range, file, date/time
       this._handlers.change = (e) => this._handleChange(e);
       document.addEventListener('change', this._handlers.change, true);
 
-      // Submit — capture form submissions
+      // Submit
       this._handlers.submit = (e) => this._handleSubmit(e);
       document.addEventListener('submit', this._handlers.submit, true);
 
-      // Keydown — capture Enter key as submit intent
+      // Keydown — Enter as submit
       this._handlers.keydown = (e) => this._handleKeydown(e);
       document.addEventListener('keydown', this._handlers.keydown, true);
+
+      // Hover (intentional, with dwell threshold)
+      this._handlers.mouseover = (e) => this._handleMouseOver(e);
+      this._handlers.mouseout = (e) => this._handleMouseOut(e);
+      document.addEventListener('mouseover', this._handlers.mouseover, true);
+      document.addEventListener('mouseout', this._handlers.mouseout, true);
+
+      // Scroll (debounced)
+      this._handlers.scroll = this._debounce((e) => this._handleScroll(e), 800);
+      window.addEventListener('scroll', this._handlers.scroll, true);
+
+      // Drag & Drop
+      this._handlers.dragstart = (e) => this._handleDragStart(e);
+      this._handlers.drop = (e) => this._handleDrop(e);
+      document.addEventListener('dragstart', this._handlers.dragstart, true);
+      document.addEventListener('drop', this._handlers.drop, true);
     },
 
     _detachListeners() {
+      document.removeEventListener('focusin', this._handlers.focusin, true);
       document.removeEventListener('click', this._handlers.click, true);
       document.removeEventListener('input', this._handlers.input, true);
       document.removeEventListener('change', this._handlers.change, true);
       document.removeEventListener('submit', this._handlers.submit, true);
       document.removeEventListener('keydown', this._handlers.keydown, true);
+      document.removeEventListener('mouseover', this._handlers.mouseover, true);
+      document.removeEventListener('mouseout', this._handlers.mouseout, true);
+      window.removeEventListener('scroll', this._handlers.scroll, true);
+      document.removeEventListener('dragstart', this._handlers.dragstart, true);
+      document.removeEventListener('drop', this._handlers.drop, true);
       this._handlers = {};
     },
 
@@ -84,25 +114,27 @@
       if (!this.active || this.paused) return;
       const target = e.target;
 
-      // Skip TestFlow overlay elements
       if (this._isTestFlowElement(target)) return;
 
-      // Skip if it's a text-like input (handled by input event)
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
       if (tag === 'input' && this._TEXT_TYPES.has(type)) return;
       if (tag === 'textarea') return;
-      // Skip <select> / <option> — the real selection is captured by the change event
       if (tag === 'select' || tag === 'option') return;
-      // Skip contenteditable (handled by input)
       if (target.isContentEditable) return;
 
+      // Classify by interaction type, not HTML tag
+      const interactionType = this._classifyClickInteraction(target);
+      const action = (interactionType === 'toggle' || interactionType === 'checkbox') ? 'toggle' : 'click';
+
       this._sendAction({
-        action: 'click',
+        action,
+        interactionType,
         element: this._extractElement(target),
         url: window.location.href,
         value: target.value || null,
         checked: target.checked,
+        valueBefore: this._valueBefore.get(target) ?? null,
         timestamp: Date.now(),
       });
     },
@@ -115,26 +147,33 @@
 
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
+      const before = this._valueBefore.get(target) ?? '';
 
-      // Range / slider → change action
+      // Range / slider
       if (tag === 'input' && type === 'range') {
         this._sendAction({
           action: 'change',
+          interactionType: 'slider',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
           timestamp: Date.now(),
         });
         return;
       }
 
-      // Color picker → change action
+      // Color picker
       if (tag === 'input' && type === 'color') {
         this._sendAction({
           action: 'change',
+          interactionType: 'color',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
           timestamp: Date.now(),
         });
         return;
@@ -143,10 +182,13 @@
       // Regular text inputs and textarea
       if (tag === 'input' || tag === 'textarea') {
         this._sendAction({
-          action: 'type',
+          action: 'input',
+          interactionType: 'text_input',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
           timestamp: Date.now(),
         });
         return;
@@ -155,16 +197,19 @@
       // contenteditable elements
       if (target.isContentEditable) {
         this._sendAction({
-          action: 'type',
+          action: 'input',
+          interactionType: 'text_input',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.innerText || target.textContent || '',
+          valueBefore: before,
+          valueAfter: target.innerText || target.textContent || '',
           timestamp: Date.now(),
         });
       }
     },
 
-    // ─── Change Handler ──────────────────────────────────────
+    // ─── Change Handler (select, checkbox, radio, file, etc.) ─
     _handleChange(e) {
       if (!this.active || this.paused) return;
       const target = e.target;
@@ -172,51 +217,93 @@
 
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
+      const before = this._valueBefore.get(target) ?? '';
 
       if (tag === 'select') {
         const selectedOption = target.options[target.selectedIndex];
+        const options = Array.from(target.options).map(o => ({
+          value: o.value, text: o.text.trim(), selected: o.selected,
+        }));
         this._sendAction({
-          action: 'change',
+          action: 'select',
+          interactionType: 'select',
           element: this._extractElement(target),
           url: window.location.href,
           value: selectedOption ? selectedOption.text : target.value,
           selectedValue: target.value,
-          selectedText:  selectedOption ? selectedOption.text : '',
+          selectedText: selectedOption ? selectedOption.text : '',
+          valueBefore: before,
+          valueAfter: target.value,
+          options,
           timestamp: Date.now(),
         });
-      } else if (type === 'checkbox' || type === 'radio') {
+      } else if (type === 'checkbox') {
         this._sendAction({
-          action: 'change',
+          action: 'toggle',
+          interactionType: 'checkbox',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.checked,
+          checked: target.checked,
+          valueBefore: !target.checked,
+          valueAfter: target.checked,
+          timestamp: Date.now(),
+        });
+      } else if (type === 'radio') {
+        this._sendAction({
+          action: 'select',
+          interactionType: 'radio',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
           checked: target.checked,
+          groupName: target.name || '',
+          valueBefore: before,
+          valueAfter: target.value,
           timestamp: Date.now(),
         });
       } else if (type === 'file') {
         const files = Array.from(target.files || []).map(f => f.name);
         this._sendAction({
           action: 'change',
+          interactionType: 'file',
           element: this._extractElement(target),
           url: window.location.href,
           value: files.join(', '),
+          files,
           timestamp: Date.now(),
         });
-      } else if (type === 'color' || type === 'range') {
+      } else if (type === 'color') {
         this._sendAction({
           action: 'change',
+          interactionType: 'color',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
           timestamp: Date.now(),
         });
-      } else if (type === 'date' || type === 'time' || type === 'datetime-local'
-               || type === 'month' || type === 'week') {
+      } else if (type === 'range') {
         this._sendAction({
           action: 'change',
+          interactionType: 'slider',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
+          timestamp: Date.now(),
+        });
+      } else if (['date', 'time', 'datetime-local', 'month', 'week'].includes(type)) {
+        this._sendAction({
+          action: 'change',
+          interactionType: 'datetime',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
           timestamp: Date.now(),
         });
       }
@@ -257,6 +344,150 @@
           }
         }
       }
+    },
+
+    // ─── Focus Handler (captures value_before) ───────────────
+    _handleFocusIn(e) {
+      if (!this.active || this.paused) return;
+      const target = e.target;
+      if (this._isTestFlowElement(target)) return;
+      const val = this._getElementValue(target);
+      if (val !== null) this._valueBefore.set(target, val);
+    },
+
+    // ─── Hover Handler (intentional hover with 1.2 s dwell) ──
+    _handleMouseOver(e) {
+      if (!this.active || this.paused) return;
+      const target = this._findHoverTarget(e.target);
+      if (!target || this._isTestFlowElement(target)) return;
+      const timer = setTimeout(() => {
+        this._sendAction({
+          action: 'hover',
+          interactionType: 'hover',
+          element: this._extractElement(target),
+          url: window.location.href,
+          timestamp: Date.now(),
+        });
+      }, 1200);
+      this._hoverTimers.set(target, timer);
+    },
+
+    _handleMouseOut(e) {
+      const target = this._findHoverTarget(e.target);
+      if (!target) return;
+      const timer = this._hoverTimers.get(target);
+      if (timer) { clearTimeout(timer); this._hoverTimers.delete(target); }
+    },
+
+    _findHoverTarget(el) {
+      let cur = el;
+      for (let i = 0; i < 5 && cur; i++) {
+        if (cur.title || cur.getAttribute?.('data-tooltip') ||
+            cur.getAttribute?.('aria-describedby') ||
+            cur.getAttribute?.('data-tippy-content')) return cur;
+        cur = cur.parentElement;
+      }
+      return null;
+    },
+
+    // ─── Scroll Handler (debounced) ──────────────────────────
+    _handleScroll(e) {
+      if (!this.active || this.paused) return;
+      const isWindow = !e.target || e.target === document || e.target === document.documentElement;
+      this._sendAction({
+        action: 'scroll',
+        interactionType: 'scroll',
+        element: isWindow ? { tag: 'window' } : this._extractElement(e.target),
+        url: window.location.href,
+        scrollX: isWindow ? window.scrollX : (e.target.scrollLeft || 0),
+        scrollY: isWindow ? window.scrollY : (e.target.scrollTop || 0),
+        timestamp: Date.now(),
+      });
+    },
+
+    // ─── Drag & Drop Handlers ────────────────────────────────
+    _handleDragStart(e) {
+      if (!this.active || this.paused) return;
+      if (this._isTestFlowElement(e.target)) return;
+      this._dragSource = {
+        element: this._extractElement(e.target),
+        timestamp: Date.now(),
+      };
+    },
+
+    _handleDrop(e) {
+      if (!this.active || this.paused || !this._dragSource) return;
+      if (this._isTestFlowElement(e.target)) return;
+      this._sendAction({
+        action: 'drag',
+        interactionType: 'drag_drop',
+        element: this._dragSource.element,
+        dropTarget: this._extractElement(e.target),
+        url: window.location.href,
+        timestamp: Date.now(),
+      });
+      this._dragSource = null;
+    },
+
+    // ─── Modal / Dialog Observer ─────────────────────────────
+    _startModalObserver() {
+      if (!document.body) return;
+      this._modalObserver = new MutationObserver((mutations) => {
+        if (!this.active || this.paused) return;
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (node.nodeType === 1 && this._isModal(node)) {
+              this._sendAction({
+                action: 'modal',
+                interactionType: 'modal',
+                modalAction: 'appear',
+                element: this._extractElement(node),
+                url: window.location.href,
+                timestamp: Date.now(),
+              });
+            }
+          }
+        }
+      });
+      this._modalObserver.observe(document.body, { childList: true, subtree: true });
+    },
+
+    _stopModalObserver() {
+      if (this._modalObserver) { this._modalObserver.disconnect(); this._modalObserver = null; }
+    },
+
+    _isModal(el) {
+      const role = (el.getAttribute?.('role') || '').toLowerCase();
+      const cls = (el.className || '').toLowerCase();
+      return role === 'dialog' || role === 'alertdialog' ||
+        el.tagName?.toLowerCase() === 'dialog' ||
+        el.getAttribute?.('aria-modal') === 'true' ||
+        cls.includes('modal') || cls.includes('dialog') ||
+        cls.includes('toast') || cls.includes('snackbar');
+    },
+
+    // ─── Click Interaction Classifier ────────────────────────
+    _classifyClickInteraction(el) {
+      const tag = (el.tagName || '').toLowerCase();
+      const type = (el.type || '').toLowerCase();
+      const role = (el.getAttribute('role') || '').toLowerCase();
+      const cls = Array.from(el.classList || []).join(' ').toLowerCase();
+      if (role === 'switch' || cls.includes('toggle') || cls.includes('switch')) return 'toggle';
+      if (role === 'checkbox' || type === 'checkbox') return 'checkbox';
+      if (role === 'radio' || type === 'radio') return 'radio';
+      if (role === 'tab') return 'tab';
+      if (tag === 'a' || role === 'link') return 'link';
+      if (tag === 'button' || role === 'button' || type === 'submit') return 'button';
+      return 'click';
+    },
+
+    // ─── Get current value of any element ────────────────────
+    _getElementValue(el) {
+      if (!el) return null;
+      const tag = (el.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return el.value || '';
+      if (el.isContentEditable) return el.innerText || '';
+      return null;
     },
 
     // ─── Element Extraction ──────────────────────────────────

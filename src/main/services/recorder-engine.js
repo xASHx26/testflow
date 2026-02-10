@@ -168,6 +168,15 @@ class RecorderEngine extends EventEmitter {
       enabled: true,
       group: null,
       notes: '',
+      // v2: universal capture metadata
+      interactionType: rawAction.interactionType || '',
+      options: rawAction.options || null,
+      valueBefore: rawAction.valueBefore ?? null,
+      valueAfter: rawAction.valueAfter ?? null,
+      dropTarget: rawAction.dropTarget || null,
+      modalAction: rawAction.modalAction || null,
+      scrollX: rawAction.scrollX ?? null,
+      scrollY: rawAction.scrollY ?? null,
     };
 
     // Add step to flow
@@ -185,37 +194,48 @@ class RecorderEngine extends EventEmitter {
     const tag  = (element?.tag || '').toLowerCase();
     const type = (element?.type || '').toLowerCase();
     const ct   = (element?.controlType || '').toLowerCase();
+    const it   = (rawAction.interactionType || '').toLowerCase();
 
     if (action === 'navigate') return 'navigate';
-    if (action === 'type' || action === 'input') return 'type';
+
+    // Text input (v2: 'input', legacy: 'type')
+    if (action === 'input' || action === 'type') return 'input';
+
+    // Direct select from change handler
+    if (action === 'select') {
+      if (it === 'radio') return 'radio';
+      return 'select';
+    }
+
+    // Toggle (checkbox/switch)
+    if (action === 'toggle') return 'toggle';
 
     if (action === 'click') {
+      if (it === 'toggle' || it === 'checkbox') return 'toggle';
+      if (it === 'radio') return 'radio';
       if (tag === 'select' || ct === 'select' || ct === 'combobox' || ct === 'listbox') return 'select';
-      if (ct === 'checkbox' || (tag === 'input' && type === 'checkbox')) return 'check';
+      if (ct === 'checkbox' || (tag === 'input' && type === 'checkbox')) return 'toggle';
       if (ct === 'radio'    || (tag === 'input' && type === 'radio'))    return 'radio';
       if (ct === 'slider'   || (tag === 'input' && type === 'range'))    return 'slider';
-      if (ct === 'toggle')  return 'check'; // toggles behave like checkboxes
-      if (tag === 'button' || type === 'submit' || element?.role === 'button') return 'click';
-      if (tag === 'a') return 'click';
+      if (ct === 'toggle')  return 'toggle';
       return 'click';
     }
 
     if (action === 'change') {
       if (tag === 'select' || ct === 'select' || ct === 'combobox') return 'select';
-      if (ct === 'checkbox' || ct === 'toggle' || (tag === 'input' && type === 'checkbox')) return 'check';
+      if (ct === 'checkbox' || ct === 'toggle' || (tag === 'input' && type === 'checkbox')) return 'toggle';
       if (ct === 'radio' || (tag === 'input' && type === 'radio')) return 'radio';
       if (ct === 'slider' || (tag === 'input' && type === 'range')) return 'slider';
-      if (ct === 'color')  return 'change';
-      if (ct === 'file')   return 'change';
       return 'change';
     }
 
     if (action === 'scroll') return 'scroll';
     if (action === 'hover')  return 'hover';
-    if (action === 'focus')  return 'focus';
+    if (action === 'drag')   return 'drag';
+    if (action === 'modal')  return 'modal';
     if (action === 'submit') return 'submit';
 
-    return 'unknown';
+    return 'click'; // fallback
   }
 
   /**
@@ -254,7 +274,19 @@ class RecorderEngine extends EventEmitter {
       case 'submit':
         return `Submit form "${truncated}"`;
       case 'scroll':
-        return `Scroll page`;
+        return `Scroll to y=${rawAction.scrollY || 0}`;
+      case 'toggle':
+        return `Toggle "${truncated}" ${rawAction.checked || rawAction.valueAfter ? 'on' : 'off'}`;
+      case 'select':
+        if (rawAction.interactionType === 'radio')
+          return `Select radio "${truncated}" \u2192 ${rawAction.value}`;
+        return `Select "${rawAction.selectedText || rawAction.value || ''}" in "${truncated}"`;
+      case 'hover':
+        return `Hover over "${truncated}"`;
+      case 'drag':
+        return `Drag "${truncated}" to target`;
+      case 'modal':
+        return `Modal ${rawAction.modalAction || 'detected'}: "${truncated}"`;
       default:
         return `${rawAction.action} on "${truncated}"`;
     }
@@ -333,19 +365,24 @@ class RecorderEngine extends EventEmitter {
       return { type: 'clickable', timeout: 5000 };
     }
 
-    // Type actions → wait for element to be visible
-    if (rawAction.action === 'type' || rawAction.action === 'input') {
+    // Text input
+    if (rawAction.action === 'input' || rawAction.action === 'type') {
       return { type: 'visible', timeout: 5000 };
     }
 
-    // Select changes → wait for element to be interactable
-    if (rawAction.action === 'change') {
+    // Select/change/toggle → wait for element to be interactable
+    if (['select', 'change', 'toggle'].includes(rawAction.action)) {
       return { type: 'visible', timeout: 5000 };
     }
 
-    // Navigation → wait for page load
+    // Navigation
     if (rawAction.action === 'navigate') {
       return { type: 'networkIdle', timeout: 15000 };
+    }
+
+    // Hover/drag/scroll/modal → brief wait
+    if (['hover', 'drag', 'scroll', 'modal'].includes(rawAction.action)) {
+      return { type: 'visible', timeout: 3000 };
     }
 
     return { type: 'visible', timeout: 5000 };
@@ -407,15 +444,14 @@ class RecorderEngine extends EventEmitter {
     const testDataMeta = {};   // key→{controlType, stepIndex, label, elementName, elementId}
     const usedKeys     = {};   // collision counter
 
-    // Any action that carries a meaningful value
-    const DATA_ACTIONS = new Set(['type', 'select', 'check', 'radio', 'slider', 'change']);
-
+    // EVERY user interaction MUST be represented in testcase.json — no exceptions.
     const steps = (flow.steps || []).map((step, index) => {
       const classifiedType = step.type || step.action;
 
       const tc = {
         stepIndex: index,
         action: classifiedType,
+        interactionType: step.interactionType || classifiedType,
         description: step.description || '',
         locator: step.locators?.[0] || null,
         allLocators: step.locators || [],
@@ -428,8 +464,8 @@ class RecorderEngine extends EventEmitter {
         return tc;
       }
 
-      // Aggregate form-input data into the top-level testData map
-      if (step.testData && Object.keys(step.testData).length > 0 && DATA_ACTIONS.has(classifiedType)) {
+      // Aggregate ALL interaction data into the top-level testData map
+      if (step.testData && Object.keys(step.testData).length > 0) {
         const [rawKey, rawValue] = Object.entries(step.testData)[0];
 
         // Ensure unique key (email, email_2, email_3 …)
@@ -460,10 +496,13 @@ class RecorderEngine extends EventEmitter {
         testData[key]     = rawValue;
         testDataMeta[key] = {
           controlType: controlType,
+          interactionType: step.interactionType || classifiedType,
           stepIndex:   index,
           label:       label,
           elementName: el.name || '',
           elementId:   el.id   || '',
+          options: step.options || undefined,
+          valueBefore: step.valueBefore ?? undefined,
         };
 
         tc.testDataKey = key;

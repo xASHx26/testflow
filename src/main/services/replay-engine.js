@@ -342,6 +342,7 @@ class ReplayEngine extends EventEmitter {
         await this._visualClick(locatorJs, 'click');
         break;
 
+      case 'toggle':
       case 'check': {
         const cbVal = Object.values(step.testData || {})[0];
         if (typeof cbVal === 'boolean') {
@@ -375,6 +376,7 @@ class ReplayEngine extends EventEmitter {
         break;
       }
 
+      case 'input':
       case 'type': {
         const value = Object.values(step.testData || {})[0] || '';
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -514,6 +516,44 @@ class ReplayEngine extends EventEmitter {
         await this._injectCursor();
         break;
       }
+
+      case 'hover':
+        await this._visualMoveAndHighlight(locatorJs, 'hover');
+        await this._sleep(800);
+        await this.browserEngine.executeScript(`
+          (() => { const el = ${locatorJs}; if (el) {
+            el.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true}));
+            el.dispatchEvent(new MouseEvent('mouseover', {bubbles:true}));
+          }})()
+        `);
+        await this._sleep(400);
+        await this.browserEngine.executeScript(`
+          (() => { const el = ${locatorJs}; if (el) {
+            el.dispatchEvent(new MouseEvent('mouseleave', {bubbles:true}));
+            el.dispatchEvent(new MouseEvent('mouseout', {bubbles:true}));
+          }})()
+        `);
+        await this._visualCleanup();
+        break;
+
+      case 'drag': {
+        await this._visualMoveAndHighlight(locatorJs, 'drag start');
+        await this._visualClickRipple();
+        await this.browserEngine.executeScript(`
+          window.__testflow_cursor?.showTooltip('drag \u2192 target')
+        `);
+        await this._sleep(600);
+        await this._visualCleanup();
+        break;
+      }
+
+      case 'modal':
+        await this.browserEngine.executeScript(`
+          window.__testflow_cursor?.showTooltip('waiting for modal\u2026')
+        `);
+        await this._sleep(1000);
+        await this._visualCleanup();
+        break;
 
       default:
         await this._visualClick(locatorJs, step.type || 'action');
