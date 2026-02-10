@@ -227,10 +227,14 @@
   //  Browser hide/show helpers for overlay visibility
   // ──────────────────────────────────────────────────────────────
   function hideBrowserView() {
+    // Suppress panel-manager resize updates so they don't restore the view
+    window.PanelManager?.suppressBrowserBounds?.();
     window.testflow?.browser?.hide?.();
   }
   function showBrowserView() {
     window.testflow?.browser?.show?.();
+    // Re-enable and recalculate bounds
+    window.PanelManager?.restoreBrowserBounds?.();
   }
 
   // ──────────────────────────────────────────────────────────────

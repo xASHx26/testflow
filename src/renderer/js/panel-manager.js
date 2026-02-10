@@ -19,6 +19,8 @@ class PanelManager {
       bottom: true,
     };
 
+    this._browserViewSuppressed = false;
+
     this._setupBottomToggle();
     this._setupTabs();
     this._setupResizeHandles();
@@ -185,6 +187,9 @@ class PanelManager {
    * Calculate and update the browser view bounds
    */
   _updateBrowserBounds() {
+    // Skip if the BrowserView is intentionally hidden (e.g. overlay open)
+    if (this._browserViewSuppressed) return;
+
     const browserPanel = this.panels.browser;
     if (!browserPanel) return;
 
@@ -204,6 +209,21 @@ class PanelManager {
    * Public method to trigger browser bounds recalculation
    */
   updateBrowserBounds() {
+    this._updateBrowserBounds();
+  }
+
+  /**
+   * Suppress browser-view bounds updates (used when an overlay hides the view)
+   */
+  suppressBrowserBounds() {
+    this._browserViewSuppressed = true;
+  }
+
+  /**
+   * Restore browser-view bounds updates and immediately recalculate
+   */
+  restoreBrowserBounds() {
+    this._browserViewSuppressed = false;
     this._updateBrowserBounds();
   }
 
