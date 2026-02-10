@@ -499,7 +499,7 @@ class ReplayEngine extends EventEmitter {
           step.value    = value;
           step.element  = {
             name: meta.elementName || tc.testDataKey,
-            type: meta.type || 'text',
+            type: meta.controlType || meta.type || 'text',
             id:   meta.elementId || '',
           };
         }

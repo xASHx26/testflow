@@ -182,33 +182,37 @@ class RecorderEngine extends EventEmitter {
    */
   _classifyIntent(rawAction) {
     const { action, element } = rawAction;
-    const tag = (element?.tag || '').toLowerCase();
+    const tag  = (element?.tag || '').toLowerCase();
     const type = (element?.type || '').toLowerCase();
+    const ct   = (element?.controlType || '').toLowerCase();
 
     if (action === 'navigate') return 'navigate';
     if (action === 'type' || action === 'input') return 'type';
 
     if (action === 'click') {
-      if (tag === 'select' || element?.role === 'listbox') return 'select';
-      if (tag === 'input' && type === 'checkbox') return 'check';
-      if (tag === 'input' && type === 'radio') return 'radio';
-      if (tag === 'input' && type === 'range') return 'slider';
+      if (tag === 'select' || ct === 'select' || ct === 'combobox' || ct === 'listbox') return 'select';
+      if (ct === 'checkbox' || (tag === 'input' && type === 'checkbox')) return 'check';
+      if (ct === 'radio'    || (tag === 'input' && type === 'radio'))    return 'radio';
+      if (ct === 'slider'   || (tag === 'input' && type === 'range'))    return 'slider';
+      if (ct === 'toggle')  return 'check'; // toggles behave like checkboxes
       if (tag === 'button' || type === 'submit' || element?.role === 'button') return 'click';
       if (tag === 'a') return 'click';
       return 'click';
     }
 
     if (action === 'change') {
-      if (tag === 'select') return 'select';
-      if (tag === 'input' && type === 'checkbox') return 'check';
-      if (tag === 'input' && type === 'radio') return 'radio';
-      if (tag === 'input' && type === 'range') return 'slider';
+      if (tag === 'select' || ct === 'select' || ct === 'combobox') return 'select';
+      if (ct === 'checkbox' || ct === 'toggle' || (tag === 'input' && type === 'checkbox')) return 'check';
+      if (ct === 'radio' || (tag === 'input' && type === 'radio')) return 'radio';
+      if (ct === 'slider' || (tag === 'input' && type === 'range')) return 'slider';
+      if (ct === 'color')  return 'change';
+      if (ct === 'file')   return 'change';
       return 'change';
     }
 
     if (action === 'scroll') return 'scroll';
-    if (action === 'hover') return 'hover';
-    if (action === 'focus') return 'focus';
+    if (action === 'hover')  return 'hover';
+    if (action === 'focus')  return 'focus';
     if (action === 'submit') return 'submit';
 
     return 'unknown';
@@ -219,6 +223,7 @@ class RecorderEngine extends EventEmitter {
    */
   _generateDescription(rawAction) {
     const el = rawAction.element || {};
+    const ct = (el.controlType || '').toLowerCase();
     const identifier = el.ariaLabel || el.label || el.placeholder || el.text || el.name || el.id || el.tag || 'element';
     const truncated = identifier.length > 50 ? identifier.substring(0, 47) + '...' : identifier;
 
@@ -226,14 +231,25 @@ class RecorderEngine extends EventEmitter {
       case 'navigate':
         return `Navigate to ${rawAction.url || rawAction.value || ''}`;
       case 'click':
+        if (ct === 'toggle')   return `Toggle switch "${truncated}"`;
+        if (ct === 'checkbox') return `Toggle checkbox "${truncated}"`;
+        if (ct === 'radio')    return `Select radio "${truncated}"`;
         return `Click on "${truncated}"`;
       case 'type':
       case 'input':
         return `Type "${rawAction.value || ''}" into "${truncated}"`;
       case 'change':
-        if (el.type === 'checkbox') return `Toggle checkbox "${truncated}"`;
-        if (el.type === 'radio') return `Select radio "${truncated}"`;
-        if (el.tag === 'select') return `Select "${rawAction.value}" in "${truncated}"`;
+        if (ct === 'select' || ct === 'combobox' || ct === 'listbox' || ct === 'multiselect')
+          return `Select "${rawAction.value}" in "${truncated}"`;
+        if (ct === 'checkbox' || ct === 'toggle')
+          return `Toggle "${truncated}" ${rawAction.checked ? 'on' : 'off'}`;
+        if (ct === 'radio') return `Select radio "${truncated}" → ${rawAction.value}`;
+        if (ct === 'slider' || ct === 'range' || ct === 'rating')
+          return `Set "${truncated}" to ${rawAction.value}`;
+        if (ct === 'color') return `Pick color ${rawAction.value} for "${truncated}"`;
+        if (ct === 'file')  return `Upload "${rawAction.value}" to "${truncated}"`;
+        if (['date', 'time', 'datetime', 'month', 'week'].includes(ct))
+          return `Set "${truncated}" to ${rawAction.value}`;
         return `Change "${truncated}" to "${rawAction.value || ''}"`;
       case 'submit':
         return `Submit form "${truncated}"`;
@@ -245,28 +261,57 @@ class RecorderEngine extends EventEmitter {
   }
 
   /**
-   * Extract test data as key-value pairs from the action
+   * Extract test data as a simple key→value pair.
+   *
+   * Every interaction that carries a value produces { sanitized_key: value }.
+   * The value type matches the control: string for text fields, boolean for
+   * checkboxes/toggles, number for sliders/ranges, etc.
    */
   _extractTestData(rawAction) {
-    const el = rawAction.element || {};
-    const key = el.name || el.ariaLabel || el.label || el.placeholder || el.id || `element_${this.stepCounter}`;
-    const sanitizedKey = key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const el  = rawAction.element || {};
+    const raw = el.name || el.ariaLabel || el.label || el.placeholder || el.id || `element_${this.stepCounter}`;
+    const key = raw.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const ct  = (el.controlType || el.type || '').toLowerCase();
 
     switch (rawAction.action) {
       case 'type':
       case 'input':
-        return { [sanitizedKey]: rawAction.value || '' };
-      case 'click':
-        if (el.type === 'checkbox') return { [sanitizedKey]: !!rawAction.checked };
-        if (el.type === 'radio') return { [sanitizedKey]: rawAction.value || true };
-        return { [`btn_${sanitizedKey}`]: true };
-      case 'change':
-        if (el.tag === 'select') return { [sanitizedKey]: rawAction.value || '' };
-        if (el.type === 'range') return { [sanitizedKey]: parseFloat(rawAction.value) || 0 };
-        if (el.type === 'checkbox') return { [sanitizedKey]: !!rawAction.checked };
-        return { [sanitizedKey]: rawAction.value || '' };
+        return { [key]: rawAction.value || '' };
+
+      case 'click': {
+        // Checkbox / toggle → boolean
+        if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
+        // Radio → selected value
+        if (ct === 'radio') return { [key]: rawAction.value || '' };
+        // Generic clicks → just note it was clicked
+        return { [key]: true };
+      }
+
+      case 'change': {
+        // Select / combobox → selected text
+        if (ct === 'select' || ct === 'combobox' || ct === 'listbox' || ct === 'multiselect' || ct === 'cascader')
+          return { [key]: rawAction.value || '' };
+        // Checkbox / toggle → boolean
+        if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
+        // Radio → value
+        if (ct === 'radio') return { [key]: rawAction.value || '' };
+        // Slider / range / number / rating → number
+        if (ct === 'slider' || ct === 'range' || ct === 'number' || ct === 'rating' || ct === 'meter')
+          return { [key]: parseFloat(rawAction.value) || 0 };
+        // Color → hex string
+        if (ct === 'color') return { [key]: rawAction.value || '#000000' };
+        // File → filename(s) string
+        if (ct === 'file') return { [key]: rawAction.value || '' };
+        // Date / time pickers → string value
+        if (['date', 'time', 'datetime', 'month', 'week'].includes(ct))
+          return { [key]: rawAction.value || '' };
+        // Fallback
+        return { [key]: rawAction.value || '' };
+      }
+
       case 'navigate':
         return { url: rawAction.url || rawAction.value || '' };
+
       default:
         return {};
     }
@@ -338,16 +383,31 @@ class RecorderEngine extends EventEmitter {
   /**
    * Generate a test case JSON from a recorded flow.
    *
-   * Produces a top-level `testData` map (field → value) that is easy to
-   * edit, plus `testDataMeta` for UI hints.  Each data-bearing step gets a
-   * `testDataKey` that points into the map so replay can look up the value.
+   * Produces a top-level `testData` map (field → value) that is simple
+   * and editable.  `testDataMeta` stores the controlType so the editor
+   * can render the right widget.  Each data-bearing step gets a
+   * `testDataKey` pointing into the map so replay can look up the value.
+   *
+   * Supported controlType values (comprehensive list):
+   *   text, password, email, number, tel, url, search,
+   *   textarea, contenteditable,
+   *   checkbox, radio, toggle,
+   *   select, combobox, listbox, multiselect, cascader,
+   *   slider, rating, meter,
+   *   color, file,
+   *   date, time, datetime, month, week,
+   *   button, link, submit, hidden,
+   *   chips, transfer, progress, scrollbar,
+   *   tab, tablist, tree, treeitem, grid, gridcell,
+   *   unknown
    */
   _generateTestCase(flow) {
     const testData     = {};   // flat key→value map (the editable test data)
-    const testDataMeta = {};   // key→{type, stepIndex, label, elementName, elementId}
+    const testDataMeta = {};   // key→{controlType, stepIndex, label, elementName, elementId}
     const usedKeys     = {};   // collision counter
 
-    const DATA_TYPES = new Set(['type', 'select', 'check', 'radio', 'slider', 'change']);
+    // Any action that carries a meaningful value
+    const DATA_ACTIONS = new Set(['type', 'select', 'check', 'radio', 'slider', 'change']);
 
     const steps = (flow.steps || []).map((step, index) => {
       const classifiedType = step.type || step.action;
@@ -368,7 +428,7 @@ class RecorderEngine extends EventEmitter {
       }
 
       // Aggregate form-input data into the top-level testData map
-      if (step.testData && Object.keys(step.testData).length > 0 && DATA_TYPES.has(classifiedType)) {
+      if (step.testData && Object.keys(step.testData).length > 0 && DATA_ACTIONS.has(classifiedType)) {
         const [rawKey, rawValue] = Object.entries(step.testData)[0];
 
         // Ensure unique key (email, email_2, email_3 …)
@@ -380,22 +440,25 @@ class RecorderEngine extends EventEmitter {
           usedKeys[key] = 1;
         }
 
-        // Infer field type from element metadata
-        const elType = (step.element?.type || '').toLowerCase();
-        const elTag  = (step.element?.tag  || '').toLowerCase();
-        let fieldType = elType || 'text';
-        if (elTag === 'select') fieldType = 'select';
-        else if (elType === 'checkbox') fieldType = 'checkbox';
-        else if (elType === 'radio')    fieldType = 'radio';
-        else if (elType === 'range')    fieldType = 'slider';
+        // Determine controlType — prefer injected controlType, fall back to tag/type
+        const el    = step.element || {};
+        const elCt  = (el.controlType || '').toLowerCase();
+        const elType = (el.type || '').toLowerCase();
+        const elTag  = (el.tag  || '').toLowerCase();
+        let controlType = elCt || elType || 'text';
+
+        // Normalize well-known synonyms
+        if (elTag === 'select' && controlType === '')          controlType = 'select';
+        if (elTag === 'textarea' && controlType === '')        controlType = 'textarea';
+        if (elType === 'range')                                 controlType = 'slider';
+        if (el.contentEditable && controlType === 'unknown')    controlType = 'contenteditable';
 
         // Human-readable label
-        const el = step.element || {};
         const label = el.label || el.ariaLabel || el.placeholder || el.name || el.id || rawKey;
 
         testData[key]     = rawValue;
         testDataMeta[key] = {
-          type:        fieldType,
+          controlType: controlType,
           stepIndex:   index,
           label:       label,
           elementName: el.name || '',

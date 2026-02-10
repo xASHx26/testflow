@@ -73,6 +73,12 @@
       this._handlers = {};
     },
 
+    // ─── Text-like input types that should be captured via input/type ─
+    _TEXT_TYPES: new Set([
+      'text', 'password', 'email', 'search', 'tel', 'url', 'number',
+      'date', 'time', 'datetime-local', 'month', 'week',
+    ]),
+
     // ─── Click Handler ───────────────────────────────────────
     _handleClick(e) {
       if (!this.active || this.paused) return;
@@ -81,11 +87,13 @@
       // Skip TestFlow overlay elements
       if (this._isTestFlowElement(target)) return;
 
-      // Skip if it's an input change (will be handled by change/input)
+      // Skip if it's a text-like input (handled by input event)
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
-      if (tag === 'input' && ['text', 'password', 'email', 'search', 'tel', 'url', 'number'].includes(type)) return;
+      if (tag === 'input' && this._TEXT_TYPES.has(type)) return;
       if (tag === 'textarea') return;
+      // Skip contenteditable (handled by input)
+      if (target.isContentEditable) return;
 
       this._sendAction({
         action: 'click',
@@ -104,24 +112,51 @@
       if (this._isTestFlowElement(target)) return;
 
       const tag = target.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'textarea') {
-        // For range inputs, treat as slider
-        if (target.type === 'range') {
-          this._sendAction({
-            action: 'change',
-            element: this._extractElement(target),
-            url: window.location.href,
-            value: target.value,
-            timestamp: Date.now(),
-          });
-          return;
-        }
+      const type = (target.type || '').toLowerCase();
 
+      // Range / slider → change action
+      if (tag === 'input' && type === 'range') {
+        this._sendAction({
+          action: 'change',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.value,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Color picker → change action
+      if (tag === 'input' && type === 'color') {
+        this._sendAction({
+          action: 'change',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.value,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Regular text inputs and textarea
+      if (tag === 'input' || tag === 'textarea') {
         this._sendAction({
           action: 'type',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // contenteditable elements
+      if (target.isContentEditable) {
+        this._sendAction({
+          action: 'type',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.innerText || target.textContent || '',
           timestamp: Date.now(),
         });
       }
@@ -134,6 +169,7 @@
       if (this._isTestFlowElement(target)) return;
 
       const tag = target.tagName.toLowerCase();
+      const type = (target.type || '').toLowerCase();
 
       if (tag === 'select') {
         const selectedOption = target.options[target.selectedIndex];
@@ -142,15 +178,43 @@
           element: this._extractElement(target),
           url: window.location.href,
           value: selectedOption ? selectedOption.text : target.value,
+          selectedValue: target.value,
+          selectedText:  selectedOption ? selectedOption.text : '',
           timestamp: Date.now(),
         });
-      } else if (target.type === 'checkbox' || target.type === 'radio') {
+      } else if (type === 'checkbox' || type === 'radio') {
         this._sendAction({
           action: 'change',
           element: this._extractElement(target),
           url: window.location.href,
           value: target.value,
           checked: target.checked,
+          timestamp: Date.now(),
+        });
+      } else if (type === 'file') {
+        const files = Array.from(target.files || []).map(f => f.name);
+        this._sendAction({
+          action: 'change',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: files.join(', '),
+          timestamp: Date.now(),
+        });
+      } else if (type === 'color' || type === 'range') {
+        this._sendAction({
+          action: 'change',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.value,
+          timestamp: Date.now(),
+        });
+      } else if (type === 'date' || type === 'time' || type === 'datetime-local'
+               || type === 'month' || type === 'week') {
+        this._sendAction({
+          action: 'change',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.value,
           timestamp: Date.now(),
         });
       }
@@ -217,6 +281,9 @@
         if (labelledEl) accessibleName = labelledEl.textContent.trim();
       }
 
+      // Detect the control type comprehensively
+      const controlType = this._detectControlType(el);
+
       return {
         tag: el.tagName.toLowerCase(),
         type: el.type || '',
@@ -232,12 +299,21 @@
         href: el.href || '',
         value: el.value || '',
         title: el.title || '',
+        controlType: controlType,
+        contentEditable: el.isContentEditable || false,
 
-        // Data attributes for testing
+        // Data attributes for testing (standard + framework-specific)
         'data-testid': el.getAttribute('data-testid') || '',
         'data-cy': el.getAttribute('data-cy') || '',
         'data-test': el.getAttribute('data-test') || '',
+        'data-test-id': el.getAttribute('data-test-id') || '',
         'data-automation-id': el.getAttribute('data-automation-id') || '',
+        'data-qa': el.getAttribute('data-qa') || '',
+
+        // Framework-specific identifiers
+        'ng-model': el.getAttribute('ng-model') || el.getAttribute('data-ng-model') || '',
+        'formcontrolname': el.getAttribute('formcontrolname') || '',
+        'v-model': el.getAttribute('v-model') || '',
 
         // XPath
         xpath: this._getRelativeXPath(el),
@@ -246,6 +322,135 @@
         // DOM position
         tagIndex: this._getTagIndex(el),
       };
+    },
+
+    /**
+     * Detect the control type of an element — covers all HTML input types
+     * plus framework/component-library patterns (React, Angular, Vue, MUI,
+     * Ant Design, Headless UI, Radix, Chakra, etc.)
+     */
+    _detectControlType(el) {
+      const tag  = (el.tagName || '').toLowerCase();
+      const type = (el.type || '').toLowerCase();
+      const role = (el.getAttribute('role') || '').toLowerCase();
+      const cls  = Array.from(el.classList || []).join(' ').toLowerCase();
+
+      // ── Native HTML input types ─────────────────────────────
+      if (tag === 'input') {
+        const INPUT_TYPE_MAP = {
+          text: 'text', password: 'password', email: 'email', number: 'number',
+          tel: 'tel', url: 'url', search: 'search',
+          checkbox: 'checkbox', radio: 'radio', range: 'slider',
+          color: 'color', file: 'file',
+          date: 'date', time: 'time', 'datetime-local': 'datetime',
+          month: 'month', week: 'week',
+          hidden: 'hidden', submit: 'submit', reset: 'reset', button: 'button',
+        };
+        return INPUT_TYPE_MAP[type] || 'text';
+      }
+      if (tag === 'textarea') return 'textarea';
+      if (tag === 'select')   return 'select';
+
+      // ── Contenteditable ─────────────────────────────────────
+      if (el.isContentEditable) return 'contenteditable';
+
+      // ── WAI-ARIA roles → control types ──────────────────────
+      const ROLE_MAP = {
+        switch: 'toggle', slider: 'slider', spinbutton: 'number',
+        combobox: 'combobox', listbox: 'listbox', option: 'option',
+        radio: 'radio', radiogroup: 'radiogroup',
+        checkbox: 'checkbox', menuitemcheckbox: 'checkbox',
+        menuitemradio: 'radio', searchbox: 'search',
+        textbox: 'text', tab: 'tab', tablist: 'tablist',
+        tree: 'tree', treeitem: 'treeitem',
+        grid: 'grid', gridcell: 'gridcell',
+        progressbar: 'progress', meter: 'meter',
+        scrollbar: 'scrollbar',
+      };
+      if (role && ROLE_MAP[role]) return ROLE_MAP[role];
+
+      // ── Framework component patterns (class / attribute heuristics) ──
+
+      // MUI (Material UI)
+      if (cls.includes('mui-switch') || cls.includes('muiswitch'))       return 'toggle';
+      if (cls.includes('mui-slider') || cls.includes('muislider'))       return 'slider';
+      if (cls.includes('mui-select') || cls.includes('muiselect'))       return 'select';
+      if (cls.includes('mui-checkbox') || cls.includes('muicheckbox'))   return 'checkbox';
+      if (cls.includes('mui-radio') || cls.includes('muiradio'))         return 'radio';
+      if (cls.includes('mui-rating') || cls.includes('muirating'))       return 'rating';
+      if (cls.includes('mui-autocomplete'))                              return 'combobox';
+      if (cls.includes('mui-datepicker') || cls.includes('muidatepicker')) return 'date';
+      if (cls.includes('mui-timepicker'))                                return 'time';
+      if (cls.includes('muiinputbase') || cls.includes('mui-inputbase'))  return 'text';
+
+      // Ant Design
+      if (cls.includes('ant-switch'))                                    return 'toggle';
+      if (cls.includes('ant-slider'))                                    return 'slider';
+      if (cls.includes('ant-select'))                                    return 'select';
+      if (cls.includes('ant-checkbox'))                                  return 'checkbox';
+      if (cls.includes('ant-radio'))                                     return 'radio';
+      if (cls.includes('ant-rate'))                                      return 'rating';
+      if (cls.includes('ant-picker'))                                    return 'date';
+      if (cls.includes('ant-cascader'))                                  return 'cascader';
+      if (cls.includes('ant-transfer'))                                  return 'transfer';
+      if (cls.includes('ant-upload'))                                    return 'file';
+      if (cls.includes('ant-input-number'))                              return 'number';
+      if (cls.includes('ant-input'))                                     return 'text';
+
+      // Chakra UI
+      if (cls.includes('chakra-switch'))                                 return 'toggle';
+      if (cls.includes('chakra-slider'))                                 return 'slider';
+      if (cls.includes('chakra-checkbox'))                               return 'checkbox';
+      if (cls.includes('chakra-radio'))                                  return 'radio';
+      if (cls.includes('chakra-select'))                                 return 'select';
+      if (cls.includes('chakra-numberinput'))                            return 'number';
+
+      // Headless UI / Radix
+      if (el.getAttribute('data-headlessui-state') != null)              return 'toggle';
+      if (el.getAttribute('data-radix-collection-item') != null)         return 'option';
+      if (el.getAttribute('data-state') === 'checked')                   return 'checkbox';
+      if (el.getAttribute('data-state') === 'unchecked')                 return 'checkbox';
+
+      // PrimeReact / PrimeNG / PrimeVue
+      if (cls.includes('p-inputswitch'))                                 return 'toggle';
+      if (cls.includes('p-slider'))                                      return 'slider';
+      if (cls.includes('p-dropdown'))                                    return 'select';
+      if (cls.includes('p-checkbox'))                                    return 'checkbox';
+      if (cls.includes('p-radiobutton'))                                 return 'radio';
+      if (cls.includes('p-calendar'))                                    return 'date';
+      if (cls.includes('p-rating'))                                      return 'rating';
+      if (cls.includes('p-multiselect'))                                 return 'multiselect';
+      if (cls.includes('p-chips'))                                       return 'chips';
+      if (cls.includes('p-colorpicker'))                                 return 'color';
+      if (cls.includes('p-inputnumber'))                                 return 'number';
+
+      // Vuetify
+      if (cls.includes('v-switch'))                                      return 'toggle';
+      if (cls.includes('v-slider'))                                      return 'slider';
+      if (cls.includes('v-checkbox'))                                    return 'checkbox';
+      if (cls.includes('v-radio'))                                       return 'radio';
+      if (cls.includes('v-select') || cls.includes('v-autocomplete'))    return 'select';
+      if (cls.includes('v-rating'))                                      return 'rating';
+      if (cls.includes('v-file-input'))                                  return 'file';
+      if (cls.includes('v-color-picker'))                                return 'color';
+      if (cls.includes('v-text-field'))                                  return 'text';
+
+      // Bootstrap
+      if (cls.includes('form-check-input') && type === 'checkbox')       return 'checkbox';
+      if (cls.includes('form-check-input') && type === 'radio')          return 'radio';
+      if (cls.includes('form-switch'))                                   return 'toggle';
+      if (cls.includes('form-range'))                                    return 'slider';
+      if (cls.includes('form-select'))                                   return 'select';
+      if (cls.includes('form-control'))                                  return 'text';
+
+      // Generic toggle / switch patterns
+      if (cls.includes('toggle') || cls.includes('switch'))              return 'toggle';
+
+      // Buttons
+      if (tag === 'button' || role === 'button')                         return 'button';
+      if (tag === 'a')                                                   return 'link';
+
+      return 'unknown';
     },
 
     // ─── XPath Generation ────────────────────────────────────

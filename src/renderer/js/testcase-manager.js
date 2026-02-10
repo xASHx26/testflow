@@ -289,7 +289,8 @@
     keys.forEach(key => {
       const value = td[key];
       const m     = meta[key] || {};
-      const ftype = m.type || 'text';
+      // Support both new `controlType` and legacy `type`
+      const controlType = m.controlType || m.type || 'text';
       const label = m.label || key;
 
       const tr = document.createElement('tr');
@@ -301,15 +302,15 @@
       tdKey.className = 'td-cell td-cell-key';
       tdKey.innerHTML = `<span class="td-field-label" title="${escHtml(key)}">${escHtml(label)}</span>`;
 
-      // Value cell — different input depending on type
+      // Value cell — different input depending on controlType
       const tdVal = document.createElement('td');
       tdVal.className = 'td-cell td-cell-val';
-      tdVal.appendChild(buildValueInput(key, value, ftype));
+      tdVal.appendChild(buildValueInput(key, value, controlType));
 
       // Type badge cell
       const tdType = document.createElement('td');
       tdType.className = 'td-cell td-cell-type';
-      tdType.innerHTML = `<span class="td-type-badge td-type-${ftype}">${ftype}</span>`;
+      tdType.innerHTML = `<span class="td-type-badge td-type-${controlType}">${controlType}</span>`;
 
       tr.appendChild(tdKey);
       tr.appendChild(tdVal);
@@ -319,13 +320,26 @@
   }
 
   /**
-   * Build the correct input control for a field type
+   * Build the correct input control for a controlType.
+   *
+   * Comprehensive list of supported types:
+   *   text, password, email, number, tel, url, search — text input
+   *   textarea, contenteditable — textarea
+   *   checkbox, toggle — checkbox
+   *   radio — text input (value is the selected option string)
+   *   select, combobox, listbox, multiselect, cascader — text input
+   *   slider, rating, meter — number input
+   *   color — color input
+   *   file — readonly text (filename)
+   *   date, time, datetime, month, week — appropriate date/time input
+   *   button, link, submit — readonly flag
    */
-  function buildValueInput(key, value, ftype) {
+  function buildValueInput(key, value, controlType) {
     const wrap = document.createElement('div');
     wrap.className = 'td-input-wrap';
 
-    if (ftype === 'checkbox') {
+    // ── Boolean types: checkbox / toggle ──────────────────────
+    if (controlType === 'checkbox' || controlType === 'toggle') {
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.className = 'td-input td-input-checkbox';
@@ -337,7 +351,11 @@
       label.textContent = value ? 'Checked' : 'Unchecked';
       cb.addEventListener('change', () => { label.textContent = cb.checked ? 'Checked' : 'Unchecked'; });
       wrap.appendChild(label);
-    } else if (ftype === 'slider') {
+      return wrap;
+    }
+
+    // ── Numeric types: slider / rating / meter / number ──────
+    if (controlType === 'slider' || controlType === 'rating' || controlType === 'meter' || controlType === 'number') {
       const num = document.createElement('input');
       num.type = 'number';
       num.className = 'td-input td-input-number';
@@ -345,28 +363,129 @@
       num.step = 'any';
       num.dataset.tdKey = key;
       wrap.appendChild(num);
-    } else if (ftype === 'password') {
-      const inp = document.createElement('input');
-      inp.type = 'text';
-      inp.className = 'td-input td-input-text';
-      inp.value = value ?? '';
-      inp.dataset.tdKey = key;
-      wrap.appendChild(inp);
-    } else {
-      // text, email, select, radio, number, etc.
-      const inp = document.createElement('input');
-      inp.type = 'text';
-      inp.className = 'td-input td-input-text';
-      inp.value = value ?? '';
-      inp.dataset.tdKey = key;
-      wrap.appendChild(inp);
+      return wrap;
     }
+
+    // ── Color ────────────────────────────────────────────────
+    if (controlType === 'color') {
+      const clr = document.createElement('input');
+      clr.type = 'color';
+      clr.className = 'td-input td-input-color';
+      clr.value = value || '#000000';
+      clr.dataset.tdKey = key;
+      wrap.appendChild(clr);
+      // Also show hex text
+      const hex = document.createElement('span');
+      hex.className = 'td-color-hex';
+      hex.textContent = clr.value;
+      clr.addEventListener('input', () => { hex.textContent = clr.value; });
+      wrap.appendChild(hex);
+      return wrap;
+    }
+
+    // ── Date / Time types ────────────────────────────────────
+    if (controlType === 'date') {
+      const d = document.createElement('input');
+      d.type = 'date';
+      d.className = 'td-input td-input-date';
+      d.value = value || '';
+      d.dataset.tdKey = key;
+      wrap.appendChild(d);
+      return wrap;
+    }
+    if (controlType === 'time') {
+      const t = document.createElement('input');
+      t.type = 'time';
+      t.className = 'td-input td-input-time';
+      t.value = value || '';
+      t.dataset.tdKey = key;
+      wrap.appendChild(t);
+      return wrap;
+    }
+    if (controlType === 'datetime') {
+      const dt = document.createElement('input');
+      dt.type = 'datetime-local';
+      dt.className = 'td-input td-input-datetime';
+      dt.value = value || '';
+      dt.dataset.tdKey = key;
+      wrap.appendChild(dt);
+      return wrap;
+    }
+    if (controlType === 'month') {
+      const m = document.createElement('input');
+      m.type = 'month';
+      m.className = 'td-input td-input-month';
+      m.value = value || '';
+      m.dataset.tdKey = key;
+      wrap.appendChild(m);
+      return wrap;
+    }
+    if (controlType === 'week') {
+      const w = document.createElement('input');
+      w.type = 'week';
+      w.className = 'td-input td-input-week';
+      w.value = value || '';
+      w.dataset.tdKey = key;
+      wrap.appendChild(w);
+      return wrap;
+    }
+
+    // ── File (read-only display of filename) ─────────────────
+    if (controlType === 'file') {
+      const f = document.createElement('input');
+      f.type = 'text';
+      f.className = 'td-input td-input-text td-input-readonly';
+      f.value = value || '';
+      f.readOnly = true;
+      f.placeholder = '(file path)';
+      f.dataset.tdKey = key;
+      wrap.appendChild(f);
+      return wrap;
+    }
+
+    // ── Textarea / contenteditable ───────────────────────────
+    if (controlType === 'textarea' || controlType === 'contenteditable') {
+      const ta = document.createElement('textarea');
+      ta.className = 'td-input td-input-textarea';
+      ta.rows = 2;
+      ta.value = value ?? '';
+      ta.dataset.tdKey = key;
+      wrap.appendChild(ta);
+      return wrap;
+    }
+
+    // ── Boolean flag (button/link clicks — true/false) ───────
+    if (typeof value === 'boolean' && controlType !== 'text') {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'td-input td-input-checkbox';
+      cb.checked = !!value;
+      cb.dataset.tdKey = key;
+      wrap.appendChild(cb);
+      const label = document.createElement('span');
+      label.className = 'td-checkbox-label';
+      label.textContent = value ? 'Yes' : 'No';
+      cb.addEventListener('change', () => { label.textContent = cb.checked ? 'Yes' : 'No'; });
+      wrap.appendChild(label);
+      return wrap;
+    }
+
+    // ── Default: text input (covers text, password, email, url,
+    //    tel, search, select value, radio value, combobox, etc.) ─
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'td-input td-input-text';
+    inp.value = value ?? '';
+    inp.dataset.tdKey = key;
+    if (controlType === 'password') inp.type = 'password';
+    wrap.appendChild(inp);
 
     return wrap;
   }
 
   /**
-   * Collect edited values from the Test Data table back into the test case
+   * Collect edited values from the Test Data table back into the test case.
+   * Reads every input/textarea/checkbox and coerces to the right JS type.
    */
   function collectTestDataEdits() {
     const tc = JSON.parse(JSON.stringify(testCases[editingIndex]));
@@ -381,6 +500,8 @@
         tc.testData[key] = inp.checked;
       } else if (inp.type === 'number') {
         tc.testData[key] = parseFloat(inp.value) || 0;
+      } else if (inp.tagName.toLowerCase() === 'textarea') {
+        tc.testData[key] = inp.value;
       } else {
         tc.testData[key] = inp.value;
       }
