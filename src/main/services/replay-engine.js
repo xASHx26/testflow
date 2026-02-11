@@ -379,14 +379,19 @@ class ReplayEngine extends EventEmitter {
           break;
         }
 
-        // React-select: detect if the clicked element is anywhere inside a
-        // react-select container (child, sibling, or parent of the input).
-        // Walk UP the DOM to find the container, then focus the input and send
-        // ArrowDown to reliably open the dropdown menu.
-        const rsInputId = await this.browserEngine.executeScript(`
+        // React-select: detect if the clicked element is a react-select
+        // container/placeholder (needs focus+ArrowDown to open the dropdown)
+        // vs. an option element (needs a normal click to select the value).
+        const rsClickType = await this.browserEngine.executeScript(`
           (() => {
             let el = ${locatorJs};
-            if (!el) return null;
+            if (!el) return 'normal';
+            // If the element itself IS a react-select option, use normal click
+            const elId = el.id || '';
+            if (/^react-select-\\d+-option-/.test(elId)) return 'option';
+            // Also check class names for option elements
+            const cls = el.className || '';
+            if (typeof cls === 'string' && cls.includes('-option')) return 'option';
             // Walk up looking for a react-select container
             let node = el;
             while (node && node !== document.body) {
@@ -394,16 +399,16 @@ class ReplayEngine extends EventEmitter {
               if (input) return input.id;
               node = node.parentElement;
             }
-            return null;
+            return 'normal';
           })()
         `);
-        if (rsInputId) {
-          // This is a react-select click — focus input and press ArrowDown to open
+        if (rsClickType !== 'normal' && rsClickType !== 'option') {
+          // This is a react-select container/placeholder click — open the dropdown
           await this._visualMoveAndHighlight(locatorJs, 'click');
           await this._visualClickRipple();
           await this.browserEngine.executeScript(`
             (() => {
-              const input = document.getElementById('${rsInputId}');
+              const input = document.getElementById('${rsClickType}');
               if (!input) return;
               input.focus();
               input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
@@ -412,6 +417,7 @@ class ReplayEngine extends EventEmitter {
           await this._sleep(400);
           await this._visualCleanup();
         } else {
+          // Normal click (including react-select options which need click to select)
           await this._visualClick(locatorJs, 'click');
         }
         break;
