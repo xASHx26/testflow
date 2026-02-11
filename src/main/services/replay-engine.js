@@ -378,7 +378,31 @@ class ReplayEngine extends EventEmitter {
           await this._visualCleanup();
           break;
         }
-        await this._visualClick(locatorJs, 'click');
+
+        // React-select containers: mousedown on the outer container div doesn't
+        // reach the inner control's React onMouseDown handler (events bubble UP,
+        // not DOWN). Redirect the click to the inner control or input element.
+        const rsRedirect = await this.browserEngine.executeScript(`
+          (() => {
+            const el = ${locatorJs};
+            if (!el || el.tagName.toLowerCase() !== 'div') return null;
+            // Check if this div is a react-select container
+            const input = el.querySelector('input[id^="react-select-"]');
+            if (!input) return null;
+            const control = input.closest('[class*="-control"]');
+            if (control) return 'control';
+            return 'input';
+          })()
+        `);
+        if (rsRedirect) {
+          // Build a locator that targets the inner control or input
+          const innerJs = rsRedirect === 'control'
+            ? `(${locatorJs}).querySelector('input[id^="react-select-"]').closest('[class*="-control"]')`
+            : `(${locatorJs}).querySelector('input[id^="react-select-"]')`;
+          await this._visualClick(innerJs, 'click');
+        } else {
+          await this._visualClick(locatorJs, 'click');
+        }
         break;
       }
 
@@ -795,18 +819,27 @@ class ReplayEngine extends EventEmitter {
         (() => {
           // Find the react-select input for this numbered instance
           const input = document.getElementById('react-select-${selectNum}-input');
-          if (input) {
-            const control = input.closest('[class*="-control"]')
-                         || input.closest('[class*="-container"]')
-                         || input.parentElement;
-            if (control) { control.click(); return true; }
-            input.focus(); input.click(); return true;
-          }
-          return false;
+          if (!input) return false;
+          // Focus the input first
+          input.focus();
+          // Find the control element (the div that react-select attaches onMouseDown to)
+          const control = input.closest('[class*="-control"]') || input.parentElement;
+          if (!control) return false;
+          // Dispatch full pointer/mouse event sequence — react-select opens on mousedown
+          const r = control.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          const opts = { bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy, button:0 };
+          control.dispatchEvent(new PointerEvent('pointerdown', opts));
+          control.dispatchEvent(new MouseEvent('mousedown', opts));
+          control.dispatchEvent(new PointerEvent('pointerup', opts));
+          control.dispatchEvent(new MouseEvent('mouseup', opts));
+          control.click();
+          return true;
         })()
       `);
       if (opened) {
-        await this._sleep(600); // Wait for dropdown menu to render
+        await this._sleep(800); // Wait for dropdown menu to render
         return true;
       }
     } catch (e) { /* non-fatal */ }
