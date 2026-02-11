@@ -16,7 +16,27 @@
   <header id="toolbar" class="toolbar">
     <div class="toolbar-left">
       <div class="toolbar-brand">
-        <span class="brand-icon"><span class="icon icon-lg icon-hexagon"></span></span>
+        <span class="brand-icon">
+          <svg class="brand-logo" width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="tf-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#89b4fa"/>
+                <stop offset="100%" stop-color="#a6e3a1"/>
+              </linearGradient>
+            </defs>
+            <!-- Rounded square background -->
+            <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#tf-grad)" opacity="0.15"/>
+            <rect x="1" y="1" width="30" height="30" rx="7" stroke="url(#tf-grad)" stroke-width="2" fill="none"/>
+            <!-- Flow arrow / play triangle -->
+            <path d="M12 8 L24 16 L12 24Z" fill="url(#tf-grad)"/>
+            <!-- Flow dots (circuit nodes) -->
+            <circle cx="8" cy="10" r="2" fill="url(#tf-grad)"/>
+            <circle cx="8" cy="22" r="2" fill="url(#tf-grad)"/>
+            <!-- Flow lines connecting dots to play arrow -->
+            <line x1="10" y1="10" x2="12" y2="12" stroke="url(#tf-grad)" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="10" y1="22" x2="12" y2="20" stroke="url(#tf-grad)" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
         <span class="brand-name">TestFlow</span>
       </div>
 
@@ -30,7 +50,8 @@
       <!-- URL Bar -->
       <div class="url-bar">
         <span class="url-icon"><span class="icon icon-sm icon-lock"></span></span>
-        <input id="url-input" type="text" placeholder="Enter URL to test..." spellcheck="false">
+        <input id="url-input" type="text" placeholder="Search Google or enter URL..." spellcheck="false">
+        <button id="btn-bookmark-star" class="url-star-btn" title="Bookmark this page">☆</button>
         <button id="btn-navigate" class="url-go-btn">Go</button>
       </div>
     </div>
@@ -114,6 +135,18 @@
       </div>
     </div>
   </header>
+
+  <!-- ─── Bookmark Bar ─────────────────────────────────────── -->
+  <div id="bookmark-bar" class="bookmark-bar">
+    <div id="bookmark-chips" class="bookmark-chips"></div>
+    <div id="bookmark-more-wrap" class="bookmark-more-wrap hidden">
+      <button id="btn-bookmark-more" class="bookmark-more-btn">Show more ▾</button>
+      <div id="bookmark-more-dropdown" class="bookmark-more-dropdown hidden"></div>
+    </div>
+  </div>
+
+  <!-- ─── Bookmark Context Menu ────────────────────────────── -->
+  <div id="bookmark-ctx-menu" class="bookmark-ctx-menu hidden"></div>
 
   <!-- ─── Main Workspace ───────────────────────────────────── -->
   <main id="workspace" class="workspace">

@@ -8,6 +8,7 @@
 const { BrowserView } = require('electron');
 const path = require('path');
 const EventEmitter = require('events');
+const { ipcMain } = require('electron');
 
 class BrowserEngine extends EventEmitter {
   constructor(mainWindow) {
@@ -18,6 +19,8 @@ class BrowserEngine extends EventEmitter {
     this.currentUrl = '';
     this.consoleMessages = [];
     this.networkRequests = [];
+    this._dialogIpcHandler = null;
+    this._dialogSyncIpcHandler = null;
   }
 
   /**
@@ -75,10 +78,27 @@ class BrowserEngine extends EventEmitter {
         if (this.inspectorEnabled) {
           await this.executeScript('window.__testflow_inspector?.enable()');
         }
+        // Always inject dialog overrides so native alerts never block the app
+        await this._injectDialogOverrides();
       } catch (e) {
         // Non-fatal — page may have redirected
       }
     });
+
+    // Handle beforeunload dialogs — auto-accept to prevent blocking
+    this.browserView.webContents.on('will-prevent-unload', (event) => {
+      // Prevent the beforeunload from blocking navigation
+      event.preventDefault();
+      this.emit('js-dialog', {
+        dialogType: 'beforeunload',
+        message: 'Page is trying to prevent unload',
+        defaultPrompt: '',
+        returnValue: true,
+      });
+    });
+
+    // Listen for dialog IPC events from the injected overrides
+    this._setupDialogIpcListeners();
 
     // Intercept network requests via webRequest API
     this._setupNetworkInterception();
@@ -97,10 +117,22 @@ class BrowserEngine extends EventEmitter {
       url = 'https://' + url;
     }
 
-    await this.browserView.webContents.loadURL(url);
-    this.currentUrl = url;
-    this.emit('navigated', url);
-    return url;
+    try {
+      await this.browserView.webContents.loadURL(url);
+    } catch (err) {
+      // ERR_ABORTED (-3) happens when the server redirects (e.g. Google search).
+      // The page still loads fine after the redirect, so ignore this error.
+      if (err.code === 'ERR_ABORTED' || err.errno === -3) {
+        // Page redirected — get the final URL from webContents
+        url = this.browserView.webContents.getURL() || url;
+      } else {
+        throw err;
+      }
+    }
+
+    this.currentUrl = this.browserView.webContents.getURL() || url;
+    this.emit('navigated', this.currentUrl);
+    return this.currentUrl;
   }
 
   /**
@@ -363,9 +395,211 @@ class BrowserEngine extends EventEmitter {
   }
 
   /**
+   * Send a native input event to the BrowserView webContents.
+   * These events are TRUSTED (isTrusted = true).
+   * For mouseMove during drag, include modifiers: ['leftButtonDown']
+   * so that event.buttons = 1 and drag libraries see the held button.
+   */
+  sendNativeInputEvent(event) {
+    const wc = this.browserView?.webContents;
+    if (!wc) return;
+    wc.sendInputEvent(event);
+  }
+
+  /**
+   * Focus the BrowserView so it receives input events.
+   */
+  focusView() {
+    try { this.browserView?.webContents?.focus(); } catch (_) {}
+  }
+
+  /**
+   * Inject window.alert/confirm/prompt overrides into the page.
+   * These overrides send dialog info via IPC and return immediately,
+   * preventing native dialogs from blocking the app.
+   */
+  async _injectDialogOverrides() {
+    const script = `
+      (function() {
+        if (window.__testflow_dialogs_patched) return;
+        window.__testflow_dialogs_patched = true;
+
+        const bridge = window.__testflow_bridge;
+        if (!bridge) return;
+
+        // Prominent centered dialog overlay — looks like a real browser alert
+        function _showDialogOverlay(type, msg) {
+          // Backdrop
+          const overlay = document.createElement('div');
+          Object.assign(overlay.style, {
+            position:'fixed',top:'0',left:'0',width:'100%',height:'100%',
+            background:'rgba(0,0,0,0.45)',zIndex:'2147483647',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            opacity:'0',transition:'opacity .2s',fontFamily:'system-ui,sans-serif',
+          });
+          // Dialog box
+          const box = document.createElement('div');
+          Object.assign(box.style, {
+            background:'#fff',borderRadius:'10px',minWidth:'340px',maxWidth:'480px',
+            boxShadow:'0 12px 40px rgba(0,0,0,.35)',overflow:'hidden',
+          });
+          // Header
+          const hdr = document.createElement('div');
+          const colors = { alert:'#1e88e5', confirm:'#43a047', prompt:'#fb8c00' };
+          const icons  = { alert:'⚠', confirm:'✓', prompt:'✏' };
+          hdr.textContent = (icons[type]||'') + '  ' + type.charAt(0).toUpperCase()+type.slice(1);
+          Object.assign(hdr.style, {
+            background:colors[type]||'#1e88e5',color:'#fff',padding:'14px 18px',
+            fontWeight:'700',fontSize:'15px',letterSpacing:'.3px',
+          });
+          // Body
+          const body = document.createElement('div');
+          body.textContent = msg || '(no message)';
+          Object.assign(body.style, {
+            padding:'22px 18px 14px',fontSize:'14px',color:'#222',lineHeight:'1.6',
+            wordBreak:'break-word',maxHeight:'200px',overflowY:'auto',
+          });
+          // Footer
+          const foot = document.createElement('div');
+          Object.assign(foot.style, { padding:'8px 18px 16px',textAlign:'right' });
+          const btn = document.createElement('button');
+          btn.textContent = 'OK';
+          Object.assign(btn.style, {
+            background:colors[type]||'#1e88e5',color:'#fff',border:'none',
+            padding:'9px 28px',borderRadius:'6px',fontSize:'14px',fontWeight:'600',
+            cursor:'pointer',
+          });
+          function dismiss() {
+            overlay.style.opacity='0'; setTimeout(()=>overlay.remove(),200);
+          }
+          btn.onclick = dismiss;
+          overlay.onclick = function(e){ if(e.target===overlay) dismiss(); };
+          foot.appendChild(btn);
+          box.appendChild(hdr); box.appendChild(body); box.appendChild(foot);
+          overlay.appendChild(box);
+          document.body.appendChild(overlay);
+          requestAnimationFrame(()=>{ overlay.style.opacity='1'; });
+          // Auto-dismiss after 3 s
+          setTimeout(()=>{ if(overlay.parentNode) dismiss(); }, 3000);
+        }
+
+        // Override window.alert
+        const origAlert = window.alert;
+        window.alert = function(message) {
+          try {
+            bridge.sendDialogEvent({
+              dialogType: 'alert',
+              message: String(message || ''),
+              defaultPrompt: '',
+              url: window.location.href,
+              timestamp: Date.now(),
+            });
+            _showDialogOverlay('alert', message);
+          } catch(e) {}
+          // alert() returns undefined — just return without blocking
+        };
+
+        // Override window.confirm
+        const origConfirm = window.confirm;
+        window.confirm = function(message) {
+          try {
+            const result = bridge.sendDialogEventSync({
+              dialogType: 'confirm',
+              message: String(message || ''),
+              defaultPrompt: '',
+              url: window.location.href,
+              timestamp: Date.now(),
+            });
+            _showDialogOverlay('confirm', message + ' → OK');
+            return result !== undefined ? !!result : true;
+          } catch(e) {
+            return true; // default: accept
+          }
+        };
+
+        // Override window.prompt
+        const origPrompt = window.prompt;
+        window.prompt = function(message, defaultValue) {
+          try {
+            const result = bridge.sendDialogEventSync({
+              dialogType: 'prompt',
+              message: String(message || ''),
+              defaultPrompt: String(defaultValue || ''),
+              url: window.location.href,
+              timestamp: Date.now(),
+            });
+            _showDialogOverlay('prompt', message + ' → ' + (result || defaultValue || ''));
+            return result !== undefined ? String(result) : (defaultValue || '');
+          } catch(e) {
+            return defaultValue || '';
+          }
+        };
+      })();
+    `;
+    return this.executeScript(script);
+  }
+
+  /**
+   * Set up IPC listeners for dialog events from the injected overrides
+   */
+  _setupDialogIpcListeners() {
+    // Async handler for alert (fire-and-forget)
+    this._dialogIpcHandler = (event, data) => {
+      // Only handle events from our BrowserView
+      if (this.browserView && event.sender === this.browserView.webContents) {
+        this.emit('js-dialog', {
+          dialogType: data.dialogType,
+          message: data.message,
+          defaultPrompt: data.defaultPrompt || '',
+          returnValue: true,
+        });
+      }
+    };
+    ipcMain.on('testflow:dialog-event', this._dialogIpcHandler);
+
+    // Sync handler for confirm/prompt (needs return value)
+    this._dialogSyncIpcHandler = (event, data) => {
+      if (this.browserView && event.sender === this.browserView.webContents) {
+        this.emit('js-dialog', {
+          dialogType: data.dialogType,
+          message: data.message,
+          defaultPrompt: data.defaultPrompt || '',
+          returnValue: data.dialogType === 'confirm' ? true : (data.defaultPrompt || ''),
+        });
+        // Return value: true for confirm, defaultPrompt for prompt
+        if (data.dialogType === 'confirm') {
+          event.returnValue = true;
+        } else if (data.dialogType === 'prompt') {
+          event.returnValue = data.defaultPrompt || '';
+        } else {
+          event.returnValue = true;
+        }
+      } else {
+        event.returnValue = true;
+      }
+    };
+    ipcMain.on('testflow:dialog-event-sync', this._dialogSyncIpcHandler);
+  }
+
+  /**
+   * Clean up dialog IPC listeners
+   */
+  _teardownDialogIpcListeners() {
+    if (this._dialogIpcHandler) {
+      ipcMain.removeListener('testflow:dialog-event', this._dialogIpcHandler);
+      this._dialogIpcHandler = null;
+    }
+    if (this._dialogSyncIpcHandler) {
+      ipcMain.removeListener('testflow:dialog-event-sync', this._dialogSyncIpcHandler);
+      this._dialogSyncIpcHandler = null;
+    }
+  }
+
+  /**
    * Destroy the browser view
    */
   destroy() {
+    this._teardownDialogIpcListeners();
     if (this.browserView) {
       this.mainWindow.removeBrowserView(this.browserView);
       this.browserView.webContents.destroy();

@@ -45,6 +45,10 @@
     _hoverTimers: new WeakMap(),
     _dragSource: null,
     _modalObserver: null,
+    // Pointer-based drag tracking (for library-based drag like sortable)
+    _pointerDragState: null,
+    _lastPointerWasDrag: false,
+    _DRAG_THRESHOLD: 30, // px movement before we consider it a drag
 
     _attachListeners() {
       // Focusin — capture value_before for any form element
@@ -81,11 +85,19 @@
       this._handlers.scroll = this._debounce((e) => this._handleScroll(e), 800);
       window.addEventListener('scroll', this._handlers.scroll, true);
 
-      // Drag & Drop
+      // Drag & Drop (HTML5 native)
       this._handlers.dragstart = (e) => this._handleDragStart(e);
       this._handlers.drop = (e) => this._handleDrop(e);
       document.addEventListener('dragstart', this._handlers.dragstart, true);
       document.addEventListener('drop', this._handlers.drop, true);
+
+      // Pointer-based drag detection (for sortable / react-dnd / dnd-kit etc.)
+      this._handlers.pointerdown = (e) => this._handlePointerDown(e);
+      this._handlers.pointermove = (e) => this._handlePointerMove(e);
+      this._handlers.pointerup   = (e) => this._handlePointerUp(e);
+      document.addEventListener('pointerdown', this._handlers.pointerdown, true);
+      document.addEventListener('pointermove', this._handlers.pointermove, true);
+      document.addEventListener('pointerup',   this._handlers.pointerup,   true);
     },
 
     _detachListeners() {
@@ -100,6 +112,9 @@
       window.removeEventListener('scroll', this._handlers.scroll, true);
       document.removeEventListener('dragstart', this._handlers.dragstart, true);
       document.removeEventListener('drop', this._handlers.drop, true);
+      document.removeEventListener('pointerdown', this._handlers.pointerdown, true);
+      document.removeEventListener('pointermove', this._handlers.pointermove, true);
+      document.removeEventListener('pointerup',   this._handlers.pointerup,   true);
       this._handlers = {};
     },
 
@@ -115,6 +130,10 @@
       const target = e.target;
 
       if (this._isTestFlowElement(target)) return;
+
+      // If the pointer gesture was a drag (moved > threshold), suppress the
+      // click — the pointerup handler already recorded a drag action.
+      if (this._lastPointerWasDrag) return;
 
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
@@ -547,6 +566,61 @@
         timestamp: Date.now(),
       });
       this._dragSource = null;
+    },
+
+    // ─── Pointer-based Drag Detection ────────────────────────
+    // Libraries like react-beautiful-dnd, @dnd-kit, sortablejs etc. use
+    // pointer/mouse events, not the HTML5 drag API.
+    _handlePointerDown(e) {
+      if (!this.active || this.paused) return;
+      if (this._isTestFlowElement(e.target)) return;
+      if (e.button !== 0) return; // only primary button
+      this._pointerDragState = {
+        startX: e.clientX,
+        startY: e.clientY,
+        element: this._extractElement(e.target),
+        target: e.target,
+        isDrag: false,
+        timestamp: Date.now(),
+      };
+    },
+
+    _handlePointerMove(e) {
+      if (!this._pointerDragState) return;
+      const s = this._pointerDragState;
+      if (s.isDrag) return; // already classified as drag
+      const dx = Math.abs(e.clientX - s.startX);
+      const dy = Math.abs(e.clientY - s.startY);
+      if (dx > this._DRAG_THRESHOLD || dy > this._DRAG_THRESHOLD) {
+        s.isDrag = true;
+      }
+    },
+
+    _handlePointerUp(e) {
+      const s = this._pointerDragState;
+      this._pointerDragState = null;
+      if (!s || !s.isDrag) {
+        this._lastPointerWasDrag = false;
+        return;
+      }
+      this._lastPointerWasDrag = true;
+      // Clear the flag after a tick so the subsequent click event sees it
+      setTimeout(() => { this._lastPointerWasDrag = false; }, 50);
+      if (!this.active || this.paused) return;
+      if (this._isTestFlowElement(e.target)) return;
+      // It was a real drag — record it
+      this._sendAction({
+        action: 'drag',
+        interactionType: 'pointer_drag',
+        element: s.element,
+        dropTarget: this._extractElement(e.target),
+        dragStartX: s.startX,
+        dragStartY: s.startY,
+        dragEndX: e.clientX,
+        dragEndY: e.clientY,
+        url: window.location.href,
+        timestamp: Date.now(),
+      });
     },
 
     // ─── Modal / Dialog Observer ─────────────────────────────

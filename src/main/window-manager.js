@@ -39,8 +39,19 @@ class WindowManager {
         webviewTag: false,
       },
       frame: true,
-      icon: path.join(__dirname, '..', '..', 'assets', 'icon.png'),
     });
+
+    // Set app icon – try PNG first, fall back to creating one from SVG at runtime
+    try {
+      const { nativeImage } = require('electron');
+      const fs = require('fs');
+      const pngPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
+      if (fs.existsSync(pngPath)) {
+        this.mainWindow.setIcon(pngPath);
+      }
+    } catch (e) {
+      // Silently ignore icon errors
+    }
 
     // Maximize on first launch for IDE feel
     this.mainWindow.maximize();

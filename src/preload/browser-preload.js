@@ -31,4 +31,14 @@ contextBridge.exposeInMainWorld('__testflow_bridge', {
   sendNetworkRequest: (data) => {
     ipcRenderer.send('network:request', data);
   },
+
+  // Dialog → Main Process (alert/confirm/prompt interception)
+  sendDialogEvent: (data) => {
+    ipcRenderer.send('testflow:dialog-event', data);
+  },
+
+  // Dialog — get response from main process (sync for confirm/prompt)
+  sendDialogEventSync: (data) => {
+    return ipcRenderer.sendSync('testflow:dialog-event-sync', data);
+  },
 });

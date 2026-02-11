@@ -77,6 +77,9 @@ class RecorderEngine extends EventEmitter {
     // Listen for actions from the injected script
     this._setupActionListener();
 
+    // Listen for native JS dialogs (alert/confirm/prompt/beforeunload)
+    this._setupDialogListener();
+
     this.emit('state-changed', this.state);
     return { success: true, flowId: this.currentFlowId, state: this.state };
   }
@@ -93,6 +96,7 @@ class RecorderEngine extends EventEmitter {
 
     await this.browserEngine.executeScript('window.__testflow_recorder?.stop()');
     this._teardownActionListener();
+    this._teardownDialogListener();
 
     this.state = 'idle';
     const flowId = this.currentFlowId;
@@ -293,6 +297,10 @@ class RecorderEngine extends EventEmitter {
       modalAction: rawAction.modalAction || null,
       scrollX: rawAction.scrollX ?? null,
       scrollY: rawAction.scrollY ?? null,
+      dragStartX: rawAction.dragStartX ?? null,
+      dragStartY: rawAction.dragStartY ?? null,
+      dragEndX: rawAction.dragEndX ?? null,
+      dragEndY: rawAction.dragEndY ?? null,
     };
 
     // Add step to flow
@@ -384,6 +392,7 @@ class RecorderEngine extends EventEmitter {
     if (action === 'hover')  return 'hover';
     if (action === 'drag')   return 'drag';
     if (action === 'modal')  return 'modal';
+    if (action === 'alert')  return 'alert';
     if (action === 'submit') return 'submit';
 
     return 'click'; // fallback
@@ -434,10 +443,19 @@ class RecorderEngine extends EventEmitter {
         return `Select "${rawAction.selectedText || rawAction.value || ''}" in "${truncated}"`;
       case 'hover':
         return `Hover over "${truncated}"`;
-      case 'drag':
-        return `Drag "${truncated}" to target`;
+      case 'drag': {
+        const dropText = rawAction.dropTarget?.text || rawAction.dropTarget?.ariaLabel || rawAction.dropTarget?.id || 'target';
+        const dropShort = dropText.length > 30 ? dropText.substring(0, 27) + '...' : dropText;
+        return `Drag "${truncated}" \u2192 "${dropShort}"`;
+      }
       case 'modal':
         return `Modal ${rawAction.modalAction || 'detected'}: "${truncated}"`;
+      case 'alert': {
+        const dtype = rawAction.dialogType || 'alert';
+        const msg = rawAction.dialogMessage || truncated;
+        const msgShort = msg.length > 50 ? msg.substring(0, 47) + '...' : msg;
+        return `Handle ${dtype} dialog: "${msgShort}"`;
+      }
       default:
         return `${rawAction.action} on "${truncated}"`;
     }
@@ -530,6 +548,14 @@ class RecorderEngine extends EventEmitter {
       case 'modal':
         return { [key]: rawAction.modalAction || 'appear' };
 
+      // ── Alert / Confirm / Prompt ───────────────────────────
+      case 'alert':
+        return {
+          dialog_type: rawAction.dialogType || 'alert',
+          dialog_message: rawAction.dialogMessage || '',
+          dialog_default: rawAction.dialogDefault || '',
+        };
+
       // ── Submit ─────────────────────────────────────────────
       case 'submit':
         return { [key]: 'submit' };
@@ -571,8 +597,8 @@ class RecorderEngine extends EventEmitter {
       return { type: 'networkIdle', timeout: 15000 };
     }
 
-    // Hover/drag/scroll/modal → brief wait
-    if (['hover', 'drag', 'scroll', 'modal'].includes(rawAction.action)) {
+    // Hover/drag/scroll/modal/alert → brief wait
+    if (['hover', 'drag', 'scroll', 'modal', 'alert'].includes(rawAction.action)) {
       return { type: 'visible', timeout: 3000 };
     }
 
@@ -606,6 +632,56 @@ class RecorderEngine extends EventEmitter {
       const { ipcMain } = require('electron');
       ipcMain.removeListener('recorder:raw-action', this._actionHandler);
       this._actionHandler = null;
+    }
+  }
+
+  /**
+   * Setup listener for native JS dialog events (alert/confirm/prompt/beforeunload)
+   * emitted by browserEngine when a dialog override fires.
+   */
+  _setupDialogListener() {
+    this._dialogHandler = (dialogInfo) => {
+      if (this.state !== 'recording') return;
+
+      // Build a synthetic raw action for the dialog
+      const rawAction = {
+        action: 'alert',
+        dialogType: dialogInfo.dialogType,
+        dialogMessage: dialogInfo.message || '',
+        dialogDefault: dialogInfo.defaultPrompt || '',
+        element: {
+          tag: 'dialog',
+          type: dialogInfo.dialogType,
+          id: '',
+          name: '',
+          classes: [],
+          text: dialogInfo.message || '',
+          placeholder: '',
+          ariaLabel: '',
+          role: 'alertdialog',
+          label: dialogInfo.dialogType,
+          href: '',
+          value: dialogInfo.message || '',
+        },
+        url: this.browserEngine.getCurrentUrl(),
+      };
+
+      const step = this._processAction(rawAction);
+      if (step) {
+        this.browserEngine.mainWindow.webContents.send('recorder:action-recorded', step);
+      }
+    };
+
+    this.browserEngine.on('js-dialog', this._dialogHandler);
+  }
+
+  /**
+   * Teardown the dialog listener
+   */
+  _teardownDialogListener() {
+    if (this._dialogHandler) {
+      this.browserEngine.removeListener('js-dialog', this._dialogHandler);
+      this._dialogHandler = null;
     }
   }
 

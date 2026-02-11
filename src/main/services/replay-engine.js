@@ -184,6 +184,13 @@ class ReplayEngine extends EventEmitter {
         return this._buildResult(step, 'passed', diagnostics);
       }
 
+      // Handle alert/confirm/prompt steps — no DOM element to locate
+      if (step.type === 'alert' || step.action === 'alert') {
+        await this._performAction(step, { strategy: 'css', value: 'body' });
+        diagnostics.duration = Date.now() - startTime;
+        return this._buildResult(step, 'passed', diagnostics);
+      }
+
       // Find the element using locator fallback
       let locatorResult = await this._findElement(step.locators, step.wait);
       diagnostics.locatorUsed = locatorResult.locator;
@@ -680,8 +687,110 @@ class ReplayEngine extends EventEmitter {
       case 'drag': {
         await this._visualMoveAndHighlight(locatorJs, 'drag start');
         await this._visualClickRipple();
+
+        // Use the RECORDED pixel coordinates for the drag.
+        // Element-based lookup fails because the source and drop target
+        // often resolve to the same element (the source IS at the drop location).
+        // Falling back to recorded dragStartX/Y → dragEndX/Y is reliable.
+        let sx = step.dragStartX;
+        let sy = step.dragStartY;
+        let dx = step.dragEndX;
+        let dy = step.dragEndY;
+
+        // If no recorded coordinates, fall back to element bounding rects
+        if (sx == null || sy == null || dx == null || dy == null) {
+          let dropLocatorJs = null;
+          if (step.dropTarget) {
+            const dt = step.dropTarget;
+            if (dt.id) {
+              dropLocatorJs = `document.getElementById('${dt.id.replace(/'/g, "\\'")}')`;
+            } else if (dt.text) {
+              dropLocatorJs = `Array.from(document.querySelectorAll('${dt.tag || '*'}')).find(el => el.textContent.trim() === '${(dt.text || '').replace(/'/g, "\\'")}')`;
+            }
+          }
+          const fallback = await this.browserEngine.executeScript(`
+            (() => {
+              const src = ${locatorJs};
+              const dst = ${dropLocatorJs || locatorJs};
+              if (!src) return null;
+              const sr = src.getBoundingClientRect();
+              const dr = dst ? dst.getBoundingClientRect() : sr;
+              return {
+                sx: Math.round(sr.left + sr.width / 2),
+                sy: Math.round(sr.top + sr.height / 2),
+                dx: Math.round(dr.left + dr.width / 2),
+                dy: Math.round(dr.top + dr.height / 2),
+              };
+            })()
+          `);
+          if (fallback) { sx = fallback.sx; sy = fallback.sy; dx = fallback.dx; dy = fallback.dy; }
+        } else {
+          // Recorded coords are viewport-relative at record time.
+          // The element may have shifted, so re-anchor the START coords to the
+          // element's current position and compute a delta-based target.
+          const anchor = await this.browserEngine.executeScript(`
+            (() => {
+              const el = ${locatorJs};
+              if (!el) return null;
+              const r = el.getBoundingClientRect();
+              return { cx: Math.round(r.left + r.width / 2), cy: Math.round(r.top + r.height / 2) };
+            })()
+          `);
+          if (anchor) {
+            const deltaX = dx - sx;
+            const deltaY = dy - sy;
+            sx = anchor.cx;
+            sy = anchor.cy;
+            dx = sx + deltaX;
+            dy = sy + deltaY;
+          }
+        }
+
+        if (sx != null && sy != null && dx != null && dy != null) {
+          // Focus the BrowserView so it receives input
+          this.browserEngine.focusView();
+          await this._sleep(100);
+
+          // 1. Mouse down at source
+          this.browserEngine.sendNativeInputEvent({
+            type: 'mouseDown', x: sx, y: sy,
+            button: 'left', clickCount: 1,
+          });
+          await this._sleep(400); // Long press for react-beautiful-dnd
+
+          // 2. Initial nudge (small moves to trigger drag detection)
+          for (let n = 1; n <= 5; n++) {
+            this.browserEngine.sendNativeInputEvent({
+              type: 'mouseMove', x: sx, y: sy + n * 2,
+              modifiers: ['leftButtonDown'],
+            });
+            await this._sleep(20);
+          }
+          await this._sleep(100);
+
+          // 3. Move from source to target
+          const moveSteps = 20;
+          for (let i = 1; i <= moveSteps; i++) {
+            const frac = i / moveSteps;
+            const mx = Math.round(sx + (dx - sx) * frac);
+            const my = Math.round(sy + (dy - sy) * frac);
+            this.browserEngine.sendNativeInputEvent({
+              type: 'mouseMove', x: mx, y: my,
+              modifiers: ['leftButtonDown'],
+            });
+            await this._sleep(20);
+          }
+          await this._sleep(200);
+
+          // 4. Mouse up at target
+          this.browserEngine.sendNativeInputEvent({
+            type: 'mouseUp', x: dx, y: dy,
+            button: 'left', clickCount: 1,
+          });
+        }
+
         await this.browserEngine.executeScript(`
-          window.__testflow_cursor?.showTooltip('drag \u2192 target')
+          window.__testflow_cursor?.showTooltip('drag \u2192 drop')
         `);
         await this._sleep(600);
         await this._visualCleanup();
@@ -695,6 +804,20 @@ class ReplayEngine extends EventEmitter {
         await this._sleep(1000);
         await this._visualCleanup();
         break;
+
+      case 'alert': {
+        const dialogType = step.testData?.dialog_type || 'alert';
+        const dialogMsg = step.testData?.dialog_message || '';
+        const msgShort = dialogMsg.length > 40 ? dialogMsg.substring(0, 37) + '...' : dialogMsg;
+        await this.browserEngine.executeScript(`
+          window.__testflow_cursor?.showTooltip('${dialogType}: "${msgShort.replace(/'/g, "\\'")}"  ✓ auto-accepted')
+        `);
+        // Dialog overrides are already injected — they auto-accept.
+        // Just show visual feedback and continue.
+        await this._sleep(800);
+        await this._visualCleanup();
+        break;
+      }
 
       default:
         await this._visualClick(locatorJs, step.type || 'action');
