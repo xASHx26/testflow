@@ -190,7 +190,7 @@ function registerIpcHandlers(context) {
 
   ipcMain.handle('replay:stop', async () => {
     testSessionActive = false;
-    const result = replayEngine.stopReplay();
+    const result = await replayEngine.stopReplay();
     windowManager.sendToRenderer('network:clear');
     return result;
   });

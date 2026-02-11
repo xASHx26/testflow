@@ -219,7 +219,11 @@ class FlowEngine {
    */
   deleteFlow(flowId) {
     this.flows.delete(flowId);
-    this.projectManager.deleteFlow(flowId);
+    try {
+      this.projectManager.deleteFlow(flowId);
+    } catch (e) {
+      // Persistence may fail (e.g. no project open) — in-memory delete still valid
+    }
     if (this.activeFlowId === flowId) {
       this.activeFlowId = null;
     }

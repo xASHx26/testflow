@@ -187,31 +187,42 @@ class App {
 
   // ─── Replay Events ──────────────────────────────────────
   _bindReplayEvents() {
-    window.testflow.on('replay:step-start', (data) => {
+    window.testflow.replay.onStepStarted?.((data) => {
       window.EventBus.emit('replay:step-start', data);
       window.EventBus.emit('console:log', {
         level: 'replay',
-        message: `Step ${data.order}: ${data.action} — ${data.description || ''}`,
+        message: `Step ${data.index + 1}: ${data.label || data.stepId}`,
         timestamp: Date.now()
       });
     });
 
-    window.testflow.on('replay:step-complete', (data) => {
+    window.testflow.replay.onStepCompleted?.((data) => {
       window.EventBus.emit('replay:step-complete', data);
-      const status = data.status === 'pass' ? '✅' : '❌';
+      const status = data.status === 'passed' ? '✅' : '❌';
       const fallback = data.diagnostics?.fallbackUsed ? ' (fallback)' : '';
       window.EventBus.emit('console:log', {
-        level: data.status === 'pass' ? 'info' : 'error',
-        message: `${status} Step ${data.order}: ${data.action}${fallback} — ${data.diagnostics?.duration || 0}ms`,
+        level: data.status === 'passed' ? 'info' : 'error',
+        message: `${status} Step ${data.index + 1}: ${data.action || data.type || ''}${fallback} — ${data.diagnostics?.duration || 0}ms`,
         timestamp: Date.now()
       });
     });
 
-    window.testflow.on('replay:complete', (data) => {
+    window.testflow.replay.onFinished?.((data) => {
       window.EventBus.emit('replay:stopped');
+      const total = data.results?.length || 0;
+      const passed = data.results?.filter(r => r.status === 'passed').length || 0;
       window.EventBus.emit('console:log', {
         level: 'replay',
-        message: `Replay complete — ${data.passed}/${data.total} passed`,
+        message: `Replay complete — ${passed}/${total} passed`,
+        timestamp: Date.now()
+      });
+    });
+
+    window.testflow.replay.onError?.((data) => {
+      window.EventBus.emit('replay:stopped');
+      window.EventBus.emit('console:log', {
+        level: 'error',
+        message: `Replay error: ${data.error}`,
         timestamp: Date.now()
       });
     });

@@ -88,6 +88,13 @@ class Toolbar {
     this.workspacePreset.addEventListener('change', () => {
       window.EventBus.emit('workspace:preset-change', this.workspacePreset.value);
     });
+
+    // Listen for natural replay completion (from app.js → EventBus)
+    window.EventBus.on('replay:stopped', () => {
+      if (this.isReplaying) {
+        this._resetReplayUI();
+      }
+    });
   }
 
   _bindMenuEvents() {
@@ -207,13 +214,24 @@ class Toolbar {
   }
 
   async _stopReplay() {
-    await window.testflow.replay.stop();
+    try {
+      await window.testflow.replay.stop();
+    } catch (err) {
+      console.error('[Toolbar] Failed to stop replay:', err);
+    }
+    this._resetReplayUI();
+    this._log('replay', 'Replay stopped');
+    window.EventBus.emit('replay:stopped');
+  }
+
+  /**
+   * Reset toolbar replay UI to idle (no event emit)
+   */
+  _resetReplayUI() {
     this.isReplaying = false;
     this.btnReplay.classList.remove('active');
     this.btnReplayStop.disabled = true;
     this._setStatus('idle', 'Ready');
-    this._log('replay', 'Replay stopped');
-    window.EventBus.emit('replay:stopped');
   }
 
   async _replayStep() {
