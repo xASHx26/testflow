@@ -734,3 +734,78 @@
   color: var(--text-secondary);
   font-weight: 500;
 }
+
+/* ─── Step Edit Dialog ────────────────────────────── */
+.edit-step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.edit-step-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-step-row-group {
+  display: flex;
+  gap: 12px;
+}
+
+.edit-locator-row,
+.edit-testdata-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.edit-locator-row .edit-loc-remove,
+.edit-testdata-row .edit-td-remove {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 16px;
+}
+
+.edit-locator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.edit-step-form textarea.modal-input {
+  resize: vertical;
+  min-height: 40px;
+  font-family: inherit;
+}
+
+.edit-step-form select.modal-input {
+  cursor: pointer;
+}
+
+.btn-sm.btn-ghost {
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-sm.btn-ghost:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: rgba(137, 180, 250, 0.08);
+}
+
+.edit-step-form .modal-label input[type="checkbox"] {
+  margin-right: 6px;
+  accent-color: var(--accent-blue);
+}

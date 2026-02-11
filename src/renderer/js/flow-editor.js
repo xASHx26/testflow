@@ -261,7 +261,7 @@ class FlowEditor {
         <span class="step-type-badge ${step.type || step.action}">${typeBadge}</span>
         <span class="step-description" title="Double-click to rename">${this._esc(desc)}</span>
         <div class="step-actions">
-          <button class="step-action-btn step-edit-btn" title="Rename">✎</button>
+          <button class="step-action-btn step-edit-btn" title="Edit Step">✎</button>
           <button class="step-action-btn step-toggle" title="${step.enabled === false ? 'Enable' : 'Disable'}">${step.enabled === false ? '○' : '●'}</button>
           <button class="step-action-btn step-remove danger" title="Remove">&times;</button>
         </div>
@@ -278,7 +278,7 @@ class FlowEditor {
         this._toggleStep(step.id, idx);
       } else if (e.target.closest('.step-edit-btn')) {
         e.stopPropagation();
-        this._startRenameStep(card, step);
+        this._openEditStepDialog(step);
       } else {
         this._selectStep(idx, step);
       }
@@ -287,7 +287,7 @@ class FlowEditor {
     const descEl = card.querySelector('.step-description');
     descEl.addEventListener('dblclick', (e) => {
       e.stopPropagation();
-      this._startRenameStep(card, step);
+      this._openEditStepDialog(step);
     });
 
     // Drag reorder
@@ -309,39 +309,224 @@ class FlowEditor {
     return card;
   }
 
-  // ─── Inline Rename Step ──────────────────────────────────
-  _startRenameStep(card, step) {
-    const descEl = card.querySelector('.step-description');
-    if (!descEl) return;
+  // ─── Edit Step Dialog ─────────────────────────────────────
+  async _openEditStepDialog(step) {
+    if (!this.activeFlowId) return;
 
-    const currentDesc = step.description || step.action || '';
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; };
+    const actionTypes = ['navigate','click','input','select','toggle','radio','slider','hover','scroll','drag','submit','alert'];
+    const actionOpts = actionTypes.map(a => `<option value="${a}"${a === (step.type || step.action) ? ' selected' : ''}>${a}</option>`).join('');
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = currentDesc;
-    input.className = 'step-rename-input';
+    const locatorRows = (step.locators || []).map((loc, i) => `
+      <div class="edit-locator-row" data-idx="${i}">
+        <select class="modal-input edit-loc-strategy" style="width:90px;flex:none">
+          <option value="css"${loc.strategy === 'css' ? ' selected' : ''}>CSS</option>
+          <option value="xpath"${loc.strategy === 'xpath' ? ' selected' : ''}>XPath</option>
+          <option value="id"${loc.strategy === 'id' ? ' selected' : ''}>ID</option>
+          <option value="name"${loc.strategy === 'name' ? ' selected' : ''}>Name</option>
+          <option value="text"${loc.strategy === 'text' ? ' selected' : ''}>Text</option>
+          <option value="aria"${loc.strategy === 'aria' ? ' selected' : ''}>Aria</option>
+        </select>
+        <input type="text" class="modal-input edit-loc-value" value="${esc(loc.value)}" style="flex:1" />
+        <button class="step-action-btn danger edit-loc-remove" title="Remove">&times;</button>
+      </div>
+    `).join('');
 
-    descEl.replaceWith(input);
-    input.focus();
-    input.select();
+    const testDataKeys = Object.keys(step.testData || {});
+    const testDataRows = testDataKeys.map(k => `
+      <div class="edit-testdata-row">
+        <input type="text" class="modal-input edit-td-key" value="${esc(k)}" placeholder="Key" style="width:120px;flex:none" />
+        <input type="text" class="modal-input edit-td-val" value="${esc((step.testData || {})[k])}" placeholder="Value" style="flex:1" />
+        <button class="step-action-btn danger edit-td-remove" title="Remove">&times;</button>
+      </div>
+    `).join('');
 
-    const commit = async () => {
-      const newDesc = input.value.trim();
-      if (newDesc && newDesc !== currentDesc) {
-        try {
-          await window.testflow.flow.updateStep(this.activeFlowId, step.id, { description: newDesc });
-          step.description = newDesc;
-        } catch (err) {
-          console.error('Failed to rename step', err);
+    const bodyHtml = `
+      <div class="edit-step-form">
+        <div class="edit-step-row">
+          <label class="modal-label">Description</label>
+          <input type="text" id="edit-step-desc" class="modal-input" value="${esc(step.description || '')}" />
+        </div>
+        <div class="edit-step-row-group">
+          <div class="edit-step-row" style="flex:1">
+            <label class="modal-label">Action Type</label>
+            <select id="edit-step-type" class="modal-input">${actionOpts}</select>
+          </div>
+          <div class="edit-step-row" style="flex:1">
+            <label class="modal-label">URL</label>
+            <input type="text" id="edit-step-url" class="modal-input" value="${esc(step.url || '')}" />
+          </div>
+        </div>
+        <div class="edit-step-row">
+          <label class="modal-label">Value / Input Text</label>
+          <input type="text" id="edit-step-value" class="modal-input" value="${esc(step.element?.value || step.valueAfter || '')}"
+            placeholder="Text that was typed or selected" />
+        </div>
+        <div class="edit-step-row">
+          <label class="modal-label">Locators</label>
+          <div id="edit-step-locators" class="edit-locator-list">${locatorRows || '<span class="text-muted">No locators</span>'}</div>
+          <button id="edit-add-locator" class="btn-sm btn-ghost" style="margin-top:4px">+ Add Locator</button>
+        </div>
+        <div class="edit-step-row">
+          <label class="modal-label">Test Data</label>
+          <div id="edit-step-testdata" class="edit-locator-list">${testDataRows || '<span class="text-muted">No test data</span>'}</div>
+          <button id="edit-add-testdata" class="btn-sm btn-ghost" style="margin-top:4px">+ Add Test Data</button>
+        </div>
+        <div class="edit-step-row-group">
+          <div class="edit-step-row" style="flex:1">
+            <label class="modal-label">Wait Type</label>
+            <select id="edit-step-wait-type" class="modal-input">
+              <option value="auto"${(step.wait?.type || 'auto') === 'auto' ? ' selected' : ''}>Auto</option>
+              <option value="fixed"${step.wait?.type === 'fixed' ? ' selected' : ''}>Fixed Delay</option>
+              <option value="element"${step.wait?.type === 'element' ? ' selected' : ''}>Wait for Element</option>
+              <option value="none"${step.wait?.type === 'none' ? ' selected' : ''}>None</option>
+            </select>
+          </div>
+          <div class="edit-step-row" style="flex:1">
+            <label class="modal-label">Timeout (ms)</label>
+            <input type="number" id="edit-step-wait-timeout" class="modal-input" value="${step.wait?.timeout || 5000}" min="0" step="500" />
+          </div>
+        </div>
+        <div class="edit-step-row">
+          <label class="modal-label">Notes</label>
+          <textarea id="edit-step-notes" class="modal-input" rows="2" placeholder="Optional notes…">${esc(step.notes || '')}</textarea>
+        </div>
+        <div class="edit-step-row">
+          <label class="modal-label">
+            <input type="checkbox" id="edit-step-enabled" ${step.enabled !== false ? 'checked' : ''} /> Enabled
+          </label>
+        </div>
+      </div>
+    `;
+
+    // Show the modal
+    const overlay = document.getElementById('modal-overlay');
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width:620px;max-height:85vh;display:flex;flex-direction:column">
+        <div class="modal-header">
+          <h3>Edit Step — #${step.order || ''}</h3>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;flex:1">${bodyHtml}</div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary modal-btn" id="edit-step-cancel">Cancel</button>
+          <button class="btn btn-primary modal-btn" id="edit-step-save">Save</button>
+        </div>
+      </div>
+    `;
+    overlay.classList.remove('hidden');
+
+    // Wire up dynamic add/remove for locators
+    const locatorList = document.getElementById('edit-step-locators');
+    document.getElementById('edit-add-locator').addEventListener('click', () => {
+      const row = document.createElement('div');
+      row.className = 'edit-locator-row';
+      row.innerHTML = `
+        <select class="modal-input edit-loc-strategy" style="width:90px;flex:none">
+          <option value="css">CSS</option><option value="xpath">XPath</option>
+          <option value="id">ID</option><option value="name">Name</option>
+          <option value="text">Text</option><option value="aria">Aria</option>
+        </select>
+        <input type="text" class="modal-input edit-loc-value" value="" style="flex:1" placeholder="Enter selector…" />
+        <button class="step-action-btn danger edit-loc-remove" title="Remove">&times;</button>
+      `;
+      // Remove the "no locators" hint
+      const hint = locatorList.querySelector('.text-muted');
+      if (hint) hint.remove();
+      locatorList.appendChild(row);
+    });
+    locatorList.addEventListener('click', (e) => {
+      if (e.target.closest('.edit-loc-remove')) e.target.closest('.edit-locator-row').remove();
+    });
+
+    // Wire up dynamic add/remove for test data
+    const tdList = document.getElementById('edit-step-testdata');
+    document.getElementById('edit-add-testdata').addEventListener('click', () => {
+      const row = document.createElement('div');
+      row.className = 'edit-testdata-row';
+      row.innerHTML = `
+        <input type="text" class="modal-input edit-td-key" value="" placeholder="Key" style="width:120px;flex:none" />
+        <input type="text" class="modal-input edit-td-val" value="" placeholder="Value" style="flex:1" />
+        <button class="step-action-btn danger edit-td-remove" title="Remove">&times;</button>
+      `;
+      const hint = tdList.querySelector('.text-muted');
+      if (hint) hint.remove();
+      tdList.appendChild(row);
+    });
+    tdList.addEventListener('click', (e) => {
+      if (e.target.closest('.edit-td-remove')) e.target.closest('.edit-testdata-row').remove();
+    });
+
+    // Save / Cancel
+    return new Promise((resolve) => {
+      const close = () => { overlay.classList.add('hidden'); overlay.innerHTML = ''; resolve(); };
+
+      overlay.querySelector('.modal-close').addEventListener('click', close);
+      document.getElementById('edit-step-cancel').addEventListener('click', close);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+      document.getElementById('edit-step-save').addEventListener('click', async () => {
+        // Collect form data
+        const updates = {};
+        const newDesc = document.getElementById('edit-step-desc').value.trim();
+        if (newDesc !== (step.description || '')) updates.description = newDesc;
+
+        const newType = document.getElementById('edit-step-type').value;
+        if (newType !== (step.type || step.action)) { updates.type = newType; updates.action = newType; }
+
+        const newUrl = document.getElementById('edit-step-url').value.trim();
+        if (newUrl !== (step.url || '')) updates.url = newUrl;
+
+        const newValue = document.getElementById('edit-step-value').value;
+        if (newValue !== (step.element?.value || step.valueAfter || '')) {
+          updates.valueAfter = newValue;
+          if (!updates.element) updates.element = { ...(step.element || {}) };
+          updates.element.value = newValue;
         }
-      }
-      this._renderSteps();
-    };
 
-    input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') input.blur();
-      if (e.key === 'Escape') { input.value = currentDesc; input.blur(); }
+        // Locators
+        const locRows = locatorList.querySelectorAll('.edit-locator-row');
+        const newLocators = [];
+        locRows.forEach(row => {
+          const strat = row.querySelector('.edit-loc-strategy').value;
+          const val = row.querySelector('.edit-loc-value').value.trim();
+          if (val) newLocators.push({ strategy: strat, value: val, confidence: 1.0 });
+        });
+        updates.locators = newLocators;
+
+        // Test Data
+        const tdRows = tdList.querySelectorAll('.edit-testdata-row');
+        const newTestData = {};
+        tdRows.forEach(row => {
+          const k = row.querySelector('.edit-td-key').value.trim();
+          const v = row.querySelector('.edit-td-val').value;
+          if (k) newTestData[k] = v;
+        });
+        updates.testData = newTestData;
+
+        // Wait
+        updates.wait = {
+          type: document.getElementById('edit-step-wait-type').value,
+          timeout: parseInt(document.getElementById('edit-step-wait-timeout').value) || 5000
+        };
+
+        // Notes
+        const newNotes = document.getElementById('edit-step-notes').value;
+        if (newNotes !== (step.notes || '')) updates.notes = newNotes;
+
+        // Enabled
+        const newEnabled = document.getElementById('edit-step-enabled').checked;
+        if (newEnabled !== (step.enabled !== false)) updates.enabled = newEnabled;
+
+        try {
+          await window.testflow.flow.updateStep(this.activeFlowId, step.id, updates);
+        } catch (err) {
+          console.error('Failed to update step', err);
+        }
+
+        close();
+        this._renderSteps();
+      });
     });
   }
 
