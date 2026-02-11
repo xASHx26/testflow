@@ -148,6 +148,14 @@
       // records the proper toggle / select action with correct state.
       if (tag === 'input' && (type === 'checkbox' || type === 'radio')) return;
 
+      // Skip clicks on wrapper elements (div, span, etc.) that contain a
+      // checkbox or radio input — the click bubbles up from the label/wrapper
+      // and the change handler already captures the actual toggle/select.
+      if (tag !== 'a' && tag !== 'button' && tag !== 'input' && tag !== 'select') {
+        const innerCheck = target.querySelector('input[type="checkbox"],input[type="radio"]');
+        if (innerCheck) return;
+      }
+
       // Classify by interaction type, not HTML tag
       const interactionType = this._classifyClickInteraction(target);
       const action = (interactionType === 'toggle' || interactionType === 'checkbox') ? 'toggle' : 'click';

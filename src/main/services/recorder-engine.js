@@ -31,9 +31,11 @@ class RecorderEngine extends EventEmitter {
     this._recentActions = new Map();
     this._DEDUP_WINDOW_MS = 600; // Merge events within this window
 
-    // Pending text-input click — held until we know whether the user is
+    // Pending text-input clicks — held until we know whether the user is
     // typing (discard click) or interacting with a different element (keep click).
-    this._pendingTextClick = null;
+    // MAP: dedupKey → rawAction  (supports click A → click B → input A → input B)
+    this._pendingTextClicks = new Map();
+    this._flushing = false;
 
     // Last text-input step per element — used to update (replace) the value
     // when the debounced input fires again with a more complete value.
@@ -85,8 +87,8 @@ class RecorderEngine extends EventEmitter {
   async stopRecording() {
     if (this.state === 'idle') return { success: false, message: 'Not recording' };
 
-    // Flush any pending text-input click before stopping
-    this._flushPendingTextClick();
+    // Flush any pending text-input clicks before stopping
+    this._flushAllPendingClicks();
     this._lastTextInputStep.clear();
 
     await this.browserEngine.executeScript('window.__testflow_recorder?.stop()');
@@ -164,30 +166,28 @@ class RecorderEngine extends EventEmitter {
     const curAction = rawAction.action;
 
     // ── Pending text-input click buffer ────────────────────────
-    // Clicks on text inputs are deferred — if an input/change event follows
-    // on the SAME element, the click is discarded (user just focused to type).
-    // If the next action is on a DIFFERENT element, the click is emitted
-    // (it may have opened a datepicker, dropdown, etc.).
+    // Clicks on text inputs are deferred in a MAP.  Because the 500ms input
+    // debounce means events can arrive as: click A → click B → input A → input B,
+    // we keep ALL pending clicks and only discard them when the matching input
+    // arrives.  Non-text actions flush all pending clicks.
     const isTextInputClick = !this._flushing && curAction === 'click' &&
       tag === 'input' && this._TEXT_TYPES_SET.has(type);
 
     if (isTextInputClick) {
-      // Flush any existing pending click first (different element)
-      this._flushPendingTextClick();
-      this._pendingTextClick = rawAction;
+      if (dedupKey) this._pendingTextClicks.set(dedupKey, rawAction);
       return null; // Don't process yet
     }
 
-    // Check if the pending click should be flushed or discarded
-    if (this._pendingTextClick) {
-      const pendingKey = this._dedupKey(this._pendingTextClick);
-      if (pendingKey && dedupKey && pendingKey === dedupKey) {
-        // Same element → discard the click (user is typing, not opening a popup)
-        this._pendingTextClick = null;
-      } else {
-        // Different element → emit the click (it opened a datepicker etc.)
-        this._flushPendingTextClick();
-      }
+    // If an input/change arrived for a text element, discard its pending click
+    if (dedupKey && this._pendingTextClicks.has(dedupKey)) {
+      this._pendingTextClicks.delete(dedupKey);
+    }
+
+    // Non-text-input action → flush all remaining pending clicks (they were
+    // intentional, e.g. opening a datepicker) — but only for actions that
+    // aren't themselves text input/change events on tracked elements.
+    if (!this._flushing && curAction !== 'input' && curAction !== 'change') {
+      this._flushAllPendingClicks();
     }
 
     // ── Standard deduplication ────────────────────────────────
@@ -311,16 +311,16 @@ class RecorderEngine extends EventEmitter {
   }
 
   /**
-   * Flush a pending text-input click — emit it as a real step.
+   * Flush ALL pending text-input clicks — emit them as real steps.
    */
-  _flushPendingTextClick() {
-    if (!this._pendingTextClick) return;
-    const raw = this._pendingTextClick;
-    this._pendingTextClick = null;
-    // Re-enter _processAction but skip the pending-click check
-    // by using a flag to avoid infinite recursion
+  _flushAllPendingClicks() {
+    if (this._pendingTextClicks.size === 0) return;
+    const pending = [...this._pendingTextClicks.values()];
+    this._pendingTextClicks.clear();
     this._flushing = true;
-    this._processAction(raw);
+    for (const raw of pending) {
+      this._processAction(raw);
+    }
     this._flushing = false;
   }
 

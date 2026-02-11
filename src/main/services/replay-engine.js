@@ -177,6 +177,13 @@ class ReplayEngine extends EventEmitter {
         return this._buildResult(step, 'passed', diagnostics);
       }
 
+      // Handle scroll separately — scroll targets window, not a DOM element
+      if (step.type === 'scroll' || step.action === 'scroll') {
+        await this._performAction(step, { strategy: 'css', value: 'window' });
+        diagnostics.duration = Date.now() - startTime;
+        return this._buildResult(step, 'passed', diagnostics);
+      }
+
       // Find the element using locator fallback
       const locatorResult = await this._findElement(step.locators, step.wait);
       diagnostics.locatorUsed = locatorResult.locator;
