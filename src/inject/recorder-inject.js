@@ -308,6 +308,18 @@
           valueAfter: target.value,
           timestamp: Date.now(),
         });
+      } else {
+        // Catch-all: number, any other input type, or unknown controls
+        this._sendAction({
+          action: 'change',
+          interactionType: type || 'unknown',
+          element: this._extractElement(target),
+          url: window.location.href,
+          value: target.value,
+          valueBefore: before,
+          valueAfter: target.value,
+          timestamp: Date.now(),
+        });
       }
     },
 

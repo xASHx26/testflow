@@ -308,47 +308,76 @@ class RecorderEngine extends EventEmitter {
     const ct  = (el.controlType || el.type || '').toLowerCase();
 
     switch (rawAction.action) {
+      // ── Text input ─────────────────────────────────────────
       case 'type':
       case 'input':
-        return { [key]: rawAction.value || '' };
+        return { [key]: rawAction.valueAfter ?? rawAction.value ?? '' };
 
+      // ── Click / button / link ──────────────────────────────
       case 'click': {
-        // Checkbox / toggle → boolean
         if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
-        // Radio → selected value
         if (ct === 'radio') return { [key]: rawAction.value || '' };
-        // Generic clicks → just note it was clicked
         return { [key]: true };
       }
 
-      case 'change': {
-        // Select / combobox → prefer the option's value attribute (e.g. "1")
-        // over the display text (e.g. "Option 1") so el.value = val works.
-        if (ct === 'select' || ct === 'combobox' || ct === 'listbox' || ct === 'multiselect' || ct === 'cascader')
-          return { [key]: rawAction.selectedValue || rawAction.value || '' };
-        // Checkbox / toggle → boolean
-        if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
-        // Radio → value
-        if (ct === 'radio') return { [key]: rawAction.value || '' };
-        // Slider / range / number / rating → number
-        if (ct === 'slider' || ct === 'range' || ct === 'number' || ct === 'rating' || ct === 'meter')
-          return { [key]: parseFloat(rawAction.value) || 0 };
-        // Color → hex string
-        if (ct === 'color') return { [key]: rawAction.value || '#000000' };
-        // File → filename(s) string
-        if (ct === 'file') return { [key]: rawAction.value || '' };
-        // Date / time pickers → string value
-        if (['date', 'time', 'datetime', 'month', 'week'].includes(ct))
-          return { [key]: rawAction.value || '' };
-        // Fallback
-        return { [key]: rawAction.value || '' };
+      // ── Toggle (checkbox / switch) ─────────────────────────
+      case 'toggle':
+        return { [key]: rawAction.valueAfter ?? !!rawAction.checked };
+
+      // ── Select (dropdown, radio from change) ───────────────
+      case 'select': {
+        if (rawAction.interactionType === 'radio')
+          return { [key]: rawAction.valueAfter ?? rawAction.value ?? '' };
+        return { [key]: rawAction.selectedValue || rawAction.value || '' };
       }
 
+      // ── Change (slider, color, file, date/time, number) ────
+      case 'change': {
+        if (ct === 'select' || ct === 'combobox' || ct === 'listbox' || ct === 'multiselect' || ct === 'cascader')
+          return { [key]: rawAction.selectedValue || rawAction.value || '' };
+        if (ct === 'checkbox' || ct === 'toggle')
+          return { [key]: rawAction.valueAfter ?? !!rawAction.checked };
+        if (ct === 'radio')
+          return { [key]: rawAction.valueAfter ?? rawAction.value ?? '' };
+        if (ct === 'slider' || ct === 'range' || ct === 'number' || ct === 'rating' || ct === 'meter')
+          return { [key]: parseFloat(rawAction.value) || 0 };
+        if (ct === 'color')
+          return { [key]: rawAction.valueAfter ?? rawAction.value ?? '#000000' };
+        if (ct === 'file')
+          return { [key]: rawAction.value || '' };
+        if (['date', 'time', 'datetime', 'month', 'week'].includes(ct))
+          return { [key]: rawAction.valueAfter ?? rawAction.value ?? '' };
+        return { [key]: rawAction.valueAfter ?? rawAction.value ?? '' };
+      }
+
+      // ── Navigate ───────────────────────────────────────────
       case 'navigate':
         return { url: rawAction.url || rawAction.value || '' };
 
+      // ── Hover ──────────────────────────────────────────────
+      case 'hover':
+        return { [key]: 'hover' };
+
+      // ── Scroll ─────────────────────────────────────────────
+      case 'scroll':
+        return { scroll_y: rawAction.scrollY || 0 };
+
+      // ── Drag & Drop ────────────────────────────────────────
+      case 'drag':
+        return { [key]: 'drag' };
+
+      // ── Modal ──────────────────────────────────────────────
+      case 'modal':
+        return { [key]: rawAction.modalAction || 'appear' };
+
+      // ── Submit ─────────────────────────────────────────────
+      case 'submit':
+        return { [key]: 'submit' };
+
+      // ── Fallback — NEVER return empty ──────────────────────
       default:
-        return {};
+        console.warn('[TestFlow] Unhandled action in _extractTestData:', rawAction.action);
+        return { [key]: rawAction.value ?? true };
     }
   }
 
