@@ -165,21 +165,29 @@
       const elId = target.id || '';
       const optMatch = elId.match(/^react-select-(\d+)-option-/);
       if (optMatch) {
-        // Clicked an option — capture the option text and dropdown name
+        // Clicked an option — capture the option index and dropdown name.
+        // Options are rendered in a portal outside the container div, so
+        // walk up from the react-select *input* (which IS inside the
+        // container) to find the named ancestor (e.g. 'state', 'city').
         const selectNum = optMatch[1];
         const container = (() => {
-          // Walk up to find the container div with an id (e.g. 'state', 'city')
-          let n = target;
+          const rsInput = document.getElementById('react-select-' + selectNum + '-input');
+          if (!rsInput) return null;
+          let n = rsInput;
           while (n && n !== document.body) {
             if (n.id && !/^react-select-/.test(n.id)) return n;
             n = n.parentElement;
           }
           return null;
         })();
+        // Extract 0-based option index from ID → store as 1-based
+        const idxMatch = elId.match(/react-select-\d+-option-(\d+)/);
+        const optionIndex = idxMatch ? parseInt(idxMatch[1], 10) + 1 : 1;
         reactSelect = {
           type: 'option',
           selectNum,
           optionText: (target.textContent || '').trim(),
+          optionIndex,
           containerName: container ? (container.id || '') : '',
         };
       } else {

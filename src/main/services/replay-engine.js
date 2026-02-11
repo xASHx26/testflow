@@ -417,47 +417,36 @@ class ReplayEngine extends EventEmitter {
           await this._sleep(400);
           await this._visualCleanup();
         } else if (rsClickType === 'option') {
-          // React-select option click — use the test data value to find the
-          // correct option by text, so editing test data actually changes the
-          // selected value instead of always clicking the recorded locator.
-          const optionText = step.value != null && step.value !== true
-            ? String(step.value)
-            : null;
-          if (optionText) {
-            const escaped = optionText.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            // Find the option whose text matches, within the open dropdown menu
-            const foundJs = `(() => {
-              const menu = document.querySelector('[class*="-menu"]');
-              if (!menu) return null;
-              const opts = menu.querySelectorAll('[class*="-option"]');
-              for (const o of opts) {
-                if (o.textContent.trim() === '${escaped}') return o.id || 'found';
+          // React-select option click — use the numeric index from test data
+          // to select the Nth option (1-based), so editing the number in the
+          // test data table changes which option gets selected.
+          const rawIdx = step.value != null ? Number(step.value) : NaN;
+          const optionIdx = Number.isFinite(rawIdx) && rawIdx >= 1 ? rawIdx : 0;
+          if (optionIdx >= 1) {
+            // Extract the react-select instance number from the element's ID
+            const selectNum = await this.browserEngine.executeScript(`
+              (() => {
+                const el = ${locatorJs};
+                if (!el) return null;
+                const m = (el.id || '').match(/^react-select-(\\d+)-option/);
+                return m ? m[1] : null;
+              })()
+            `);
+            if (selectNum) {
+              const targetId = 'react-select-' + selectNum + '-option-' + (optionIdx - 1);
+              const targetJs = `document.getElementById('${targetId}')`;
+              const exists = await this.browserEngine.executeScript(`!!${targetJs}`);
+              if (exists) {
+                await this._visualClick(targetJs, `select option #${optionIdx}`);
+              } else {
+                // Fallback to recorded locator
+                await this._visualClick(locatorJs, 'click');
               }
-              return null;
-            })()`;
-            const matchId = await this.browserEngine.executeScript(foundJs);
-            if (matchId && matchId !== 'found') {
-              // Click the matched option by its ID
-              const matchLocatorJs = `document.getElementById('${matchId}')`;
-              await this._visualClick(matchLocatorJs, `select: ${optionText}`);
-            } else if (matchId === 'found') {
-              // Option exists but has no ID — click by text match
-              const matchLocatorJs = `(() => {
-                const menu = document.querySelector('[class*="-menu"]');
-                if (!menu) return null;
-                const opts = menu.querySelectorAll('[class*="-option"]');
-                for (const o of opts) {
-                  if (o.textContent.trim() === '${escaped}') return o;
-                }
-                return null;
-              })()`;
-              await this._visualClick(matchLocatorJs, `select: ${optionText}`);
             } else {
-              // Fallback to recorded locator
               await this._visualClick(locatorJs, 'click');
             }
           } else {
-            // No meaningful text value — use recorded locator
+            // No valid index — use recorded locator
             await this._visualClick(locatorJs, 'click');
           }
         } else {

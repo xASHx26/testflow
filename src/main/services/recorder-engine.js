@@ -470,13 +470,10 @@ class RecorderEngine extends EventEmitter {
           if (rs.type === 'option') {
             const rsKey = (rs.containerName || `dropdown_${rs.selectNum}`)
               .replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-            return { [rsKey]: rs.optionText || '' };
+            return { [rsKey]: rs.optionIndex || 1 };
           }
-          if (rs.type === 'container') {
-            const rsKey = (rs.containerName || `dropdown_${rs.selectNum}`)
-              .replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-            return { [rsKey]: true };
-          }
+          // Container click just opens the dropdown — no meaningful test data
+          if (rs.type === 'container') return {};
         }
         if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
         if (ct === 'radio') return { [key]: rawAction.value || '' };
