@@ -185,10 +185,22 @@ class ReplayEngine extends EventEmitter {
       }
 
       // Find the element using locator fallback
-      const locatorResult = await this._findElement(step.locators, step.wait);
+      let locatorResult = await this._findElement(step.locators, step.wait);
       diagnostics.locatorUsed = locatorResult.locator;
       diagnostics.locatorsFailed = locatorResult.failed;
       diagnostics.fallbackUsed = locatorResult.fallbackUsed;
+
+      // Recovery: if the element is a react-select dropdown option that
+      // disappeared (e.g. a scroll closed the dropdown), re-open and retry.
+      if (!locatorResult.found && (step.type === 'click' || step.action === 'click')) {
+        const reopened = await this._tryRecoverReactSelect(step);
+        if (reopened) {
+          locatorResult = await this._findElement(step.locators, step.wait);
+          diagnostics.locatorUsed = locatorResult.locator;
+          diagnostics.locatorsFailed = locatorResult.failed;
+          diagnostics.fallbackUsed = locatorResult.fallbackUsed;
+        }
+      }
 
       if (!locatorResult.found) {
         diagnostics.duration = Date.now() - startTime;
@@ -759,6 +771,46 @@ class ReplayEngine extends EventEmitter {
       error,
       timestamp: Date.now(),
     };
+  }
+
+  /**
+   * Recovery helper: if a step targets a react-select dropdown option that is
+   * not in the DOM (dropdown closed by scroll / blur), re-open the parent
+   * dropdown container so the option becomes available again.
+   */
+  async _tryRecoverReactSelect(step) {
+    const locators = step.locators || [];
+    // Check if any locator has a react-select option ID pattern
+    const rsLocator = locators.find(
+      l => l.type === 'id' && /^react-select-\d+-option-\d+$/.test(l.value)
+    );
+    if (!rsLocator) return false;
+
+    const match = rsLocator.value.match(/^react-select-(\d+)-option-/);
+    if (!match) return false;
+
+    const selectNum = match[1];
+    try {
+      const opened = await this.browserEngine.executeScript(`
+        (() => {
+          // Find the react-select input for this numbered instance
+          const input = document.getElementById('react-select-${selectNum}-input');
+          if (input) {
+            const control = input.closest('[class*="-control"]')
+                         || input.closest('[class*="-container"]')
+                         || input.parentElement;
+            if (control) { control.click(); return true; }
+            input.focus(); input.click(); return true;
+          }
+          return false;
+        })()
+      `);
+      if (opened) {
+        await this._sleep(600); // Wait for dropdown menu to render
+        return true;
+      }
+    } catch (e) { /* non-fatal */ }
+    return false;
   }
 
   _sleep(ms) {
