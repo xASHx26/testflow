@@ -19,6 +19,17 @@ class RecorderEngine extends EventEmitter {
     this.stepCounter = 0;
     this._actionHandler = null;
     this.startUrl = null; // URL when recording began
+
+    // Text-like types for dedup (same as in recorder-inject.js)
+    this._TEXT_TYPES_SET = new Set([
+      'text', 'password', 'email', 'search', 'tel', 'url', 'number',
+      'date', 'time', 'datetime-local', 'month', 'week',
+    ]);
+
+    // Deduplication buffer — tracks recent actions to suppress duplicates.
+    // Key: "elementId|action" → { timestamp, step }
+    this._recentActions = new Map();
+    this._DEDUP_WINDOW_MS = 600; // Merge events within this window
   }
 
   /**
@@ -132,6 +143,41 @@ class RecorderEngine extends EventEmitter {
   _processAction(rawAction) {
     if (this.state !== 'recording') return null;
 
+    // ── Deduplication ──────────────────────────────────────────
+    const dedupKey = this._dedupKey(rawAction);
+    const now = Date.now();
+
+    // Purge stale entries
+    for (const [k, v] of this._recentActions) {
+      if (now - v.timestamp > this._DEDUP_WINDOW_MS) this._recentActions.delete(k);
+    }
+
+    if (dedupKey) {
+      const prev = this._recentActions.get(dedupKey);
+      if (prev && (now - prev.timestamp) < this._DEDUP_WINDOW_MS) {
+        const prevAction = prev.action;
+        const curAction = rawAction.action;
+        const curIt = (rawAction.interactionType || '').toLowerCase();
+
+        // Suppress duplicate toggle/checkbox events on the same element
+        if (curAction === 'toggle' && prevAction === 'toggle') return null;
+
+        // Suppress duplicate radio events on the same element
+        if (curAction === 'select' && curIt === 'radio' && prevAction === 'select') return null;
+
+        // Suppress change event when input already captured the text value
+        if (curAction === 'change' && prevAction === 'input') {
+          const el = rawAction.element || {};
+          const tag = (el.tag || '').toLowerCase();
+          const type = (el.type || '').toLowerCase();
+          if (tag === 'input' && this._TEXT_TYPES_SET.has(type)) return null;
+          if (tag === 'textarea') return null;
+        }
+      }
+      // Record this action for future dedup checks
+      this._recentActions.set(dedupKey, { timestamp: now, action: rawAction.action });
+    }
+
     this.stepCounter++;
 
     // Generate ranked locators for the element
@@ -184,6 +230,17 @@ class RecorderEngine extends EventEmitter {
 
     this.emit('action-recorded', step);
     return step;
+  }
+
+  /**
+   * Build a dedup key from a raw action — actions on the same element
+   * within the dedup window are candidates for suppression.
+   */
+  _dedupKey(rawAction) {
+    const el = rawAction.element || {};
+    const id = el.id || el.name || el.xpath || '';
+    if (!id) return null;
+    return `${id}|${el.tag || ''}|${el.type || ''}`;
   }
 
   /**

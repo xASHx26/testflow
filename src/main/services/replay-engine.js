@@ -338,9 +338,30 @@ class ReplayEngine extends EventEmitter {
     await this._ensureCursor();
 
     switch (step.type) {
-      case 'click':
+      case 'click': {
+        // Check if the target is a <select> — skip the click because the native
+        // OS dropdown blocks all JS execution. The subsequent 'select' step
+        // handles the value change programmatically.
+        const tagCheck = await this.browserEngine.executeScript(`
+          (() => {
+            const el = ${locatorJs};
+            if (!el) return 'missing';
+            return el.tagName ? el.tagName.toLowerCase() : 'unknown';
+          })()
+        `);
+        if (tagCheck === 'select') {
+          // Just focus it instead of clicking (avoids native dropdown)
+          await this._visualMoveAndHighlight(locatorJs, 'select dropdown');
+          await this.browserEngine.executeScript(`
+            (() => { const el = ${locatorJs}; if (el) el.focus(); })()
+          `);
+          await this._sleep(200);
+          await this._visualCleanup();
+          break;
+        }
         await this._visualClick(locatorJs, 'click');
         break;
+      }
 
       case 'toggle':
       case 'check': {
@@ -470,17 +491,20 @@ class ReplayEngine extends EventEmitter {
         await this._visualCleanup();
         break;
 
-      case 'scroll':
+      case 'scroll': {
+        const scrollVal = Object.values(step.testData || {})[0];
+        const scrollY = parseInt(scrollVal, 10) || 0;
         await this.browserEngine.executeScript(`
-          window.__testflow_cursor?.showTooltip('scroll ↓');
+          window.__testflow_cursor?.showTooltip('scroll → y=${scrollY}');
         `);
         await this._sleep(200);
-        await this.browserEngine.executeScript(`window.scrollBy(0, 300)`);
+        await this.browserEngine.executeScript(`window.scrollTo(0, ${scrollY})`);
         await this._sleep(300);
         await this.browserEngine.executeScript(`
           window.__testflow_cursor?.hideTooltip();
         `);
         break;
+      }
 
       case 'change': {
         const value = Object.values(step.testData || {})[0] || '';

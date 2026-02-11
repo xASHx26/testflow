@@ -120,10 +120,30 @@
       const type = (target.type || '').toLowerCase();
       if (tag === 'input' && this._TEXT_TYPES.has(type)) return;
       if (tag === 'textarea') return;
-      // Skip <option> clicks — the change event captures the actual selection.
-      // But let <select> clicks through so 'open dropdown' is recorded.
+      // Skip <option> AND <select> clicks — the change handler captures the
+      // actual selection intent.  Clicking a native <select> opens a blocking
+      // OS dropdown that freezes Electron JS execution during replay.
       if (tag === 'option') return;
+      if (tag === 'select') return;
       if (target.isContentEditable) return;
+
+      // Skip clicks on <label> elements whose associated input is a
+      // checkbox or radio — the change event on the input captures the
+      // real state change.  Recording the label click too creates duplicates.
+      if (tag === 'label') {
+        const forId = target.getAttribute('for');
+        const assocInput = forId
+          ? document.getElementById(forId)
+          : target.querySelector('input[type="checkbox"],input[type="radio"]');
+        if (assocInput) {
+          const assocType = (assocInput.type || '').toLowerCase();
+          if (assocType === 'checkbox' || assocType === 'radio') return;
+        }
+      }
+
+      // Skip direct clicks on radio / checkbox inputs — the change handler
+      // records the proper toggle / select action with correct state.
+      if (tag === 'input' && (type === 'checkbox' || type === 'radio')) return;
 
       // Classify by interaction type, not HTML tag
       const interactionType = this._classifyClickInteraction(target);
@@ -149,6 +169,12 @@
 
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
+
+      // Skip input events on non-text controls — the change handler
+      // records the proper action for these (toggle, radio, select, file).
+      if (type === 'checkbox' || type === 'radio' || type === 'file') return;
+      if (tag === 'select') return;
+
       const before = this._valueBefore.get(target) ?? '';
 
       // Range / slider
