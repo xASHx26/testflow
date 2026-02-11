@@ -379,27 +379,38 @@ class ReplayEngine extends EventEmitter {
           break;
         }
 
-        // React-select containers: mousedown on the outer container div doesn't
-        // reach the inner control's React onMouseDown handler (events bubble UP,
-        // not DOWN). Redirect the click to the inner control or input element.
-        const rsRedirect = await this.browserEngine.executeScript(`
+        // React-select: detect if the clicked element is anywhere inside a
+        // react-select container (child, sibling, or parent of the input).
+        // Walk UP the DOM to find the container, then focus the input and send
+        // ArrowDown to reliably open the dropdown menu.
+        const rsInputId = await this.browserEngine.executeScript(`
           (() => {
-            const el = ${locatorJs};
-            if (!el || el.tagName.toLowerCase() !== 'div') return null;
-            // Check if this div is a react-select container
-            const input = el.querySelector('input[id^="react-select-"]');
-            if (!input) return null;
-            const control = input.closest('[class*="-control"]');
-            if (control) return 'control';
-            return 'input';
+            let el = ${locatorJs};
+            if (!el) return null;
+            // Walk up looking for a react-select container
+            let node = el;
+            while (node && node !== document.body) {
+              const input = node.querySelector('input[id^="react-select-"]');
+              if (input) return input.id;
+              node = node.parentElement;
+            }
+            return null;
           })()
         `);
-        if (rsRedirect) {
-          // Build a locator that targets the inner control or input
-          const innerJs = rsRedirect === 'control'
-            ? `(${locatorJs}).querySelector('input[id^="react-select-"]').closest('[class*="-control"]')`
-            : `(${locatorJs}).querySelector('input[id^="react-select-"]')`;
-          await this._visualClick(innerJs, 'click');
+        if (rsInputId) {
+          // This is a react-select click — focus input and press ArrowDown to open
+          await this._visualMoveAndHighlight(locatorJs, 'click');
+          await this._visualClickRipple();
+          await this.browserEngine.executeScript(`
+            (() => {
+              const input = document.getElementById('${rsInputId}');
+              if (!input) return;
+              input.focus();
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
+            })()
+          `);
+          await this._sleep(400);
+          await this._visualCleanup();
         } else {
           await this._visualClick(locatorJs, 'click');
         }
@@ -815,26 +826,17 @@ class ReplayEngine extends EventEmitter {
 
     const selectNum = match[1];
     try {
+      // Focus the hidden input and press ArrowDown to open the menu.
+      // This is the most reliable way — react-select explicitly handles
+      // onKeyDown for ArrowDown and opens the menu.
       const opened = await this.browserEngine.executeScript(`
         (() => {
-          // Find the react-select input for this numbered instance
           const input = document.getElementById('react-select-${selectNum}-input');
           if (!input) return false;
-          // Focus the input first
           input.focus();
-          // Find the control element (the div that react-select attaches onMouseDown to)
-          const control = input.closest('[class*="-control"]') || input.parentElement;
-          if (!control) return false;
-          // Dispatch full pointer/mouse event sequence — react-select opens on mousedown
-          const r = control.getBoundingClientRect();
-          const cx = r.left + r.width / 2;
-          const cy = r.top + r.height / 2;
-          const opts = { bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy, button:0 };
-          control.dispatchEvent(new PointerEvent('pointerdown', opts));
-          control.dispatchEvent(new MouseEvent('mousedown', opts));
-          control.dispatchEvent(new PointerEvent('pointerup', opts));
-          control.dispatchEvent(new MouseEvent('mouseup', opts));
-          control.click();
+          input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown', keyCode: 40, bubbles: true
+          }));
           return true;
         })()
       `);
