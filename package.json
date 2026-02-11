@@ -10,7 +10,7 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
-    "pack": "@electron/packager . TestFlow --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icon.png --ignore=\"dist|\\.git|\\.vscode\"",
+    "pack": "@electron/packager . TestFlow --platform=win32 --arch=x64 --out=dist --overwrite --ignore=\"^/dist$|^/\\.git|^/\\.vscode\"",
     "lint": "eslint src/",
     "test": "jest"
   },
