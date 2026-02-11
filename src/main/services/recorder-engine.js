@@ -213,7 +213,9 @@ class RecorderEngine extends EventEmitter {
     if (action === 'click') {
       if (it === 'toggle' || it === 'checkbox') return 'toggle';
       if (it === 'radio') return 'radio';
-      if (tag === 'select' || ct === 'select' || ct === 'combobox' || ct === 'listbox') return 'select';
+      // Don't classify click on <select> as 'select' — clicking just opens the
+      // dropdown. The actual selection comes from action='select' (change event).
+      if (ct === 'combobox' || ct === 'listbox') return 'select';
       if (ct === 'checkbox' || (tag === 'input' && type === 'checkbox')) return 'toggle';
       if (ct === 'radio'    || (tag === 'input' && type === 'radio'))    return 'radio';
       if (ct === 'slider'   || (tag === 'input' && type === 'range'))    return 'slider';

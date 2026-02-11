@@ -120,7 +120,9 @@
       const type = (target.type || '').toLowerCase();
       if (tag === 'input' && this._TEXT_TYPES.has(type)) return;
       if (tag === 'textarea') return;
-      if (tag === 'select' || tag === 'option') return;
+      // Skip <option> clicks — the change event captures the actual selection.
+      // But let <select> clicks through so 'open dropdown' is recorded.
+      if (tag === 'option') return;
       if (target.isContentEditable) return;
 
       // Classify by interaction type, not HTML tag
