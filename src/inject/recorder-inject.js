@@ -160,6 +160,54 @@
       const interactionType = this._classifyClickInteraction(target);
       const action = (interactionType === 'toggle' || interactionType === 'checkbox') ? 'toggle' : 'click';
 
+      // Detect react-select option / container clicks and enrich with metadata
+      let reactSelect = null;
+      const elId = target.id || '';
+      const optMatch = elId.match(/^react-select-(\d+)-option-/);
+      if (optMatch) {
+        // Clicked an option — capture the option text and dropdown name
+        const selectNum = optMatch[1];
+        const container = (() => {
+          // Walk up to find the container div with an id (e.g. 'state', 'city')
+          let n = target;
+          while (n && n !== document.body) {
+            if (n.id && !/^react-select-/.test(n.id)) return n;
+            n = n.parentElement;
+          }
+          return null;
+        })();
+        reactSelect = {
+          type: 'option',
+          selectNum,
+          optionText: (target.textContent || '').trim(),
+          containerName: container ? (container.id || '') : '',
+        };
+      } else {
+        // Check if we're inside a react-select container (clicking placeholder, etc.)
+        let n = target;
+        while (n && n !== document.body) {
+          const rsInput = n.querySelector('input[id^="react-select-"]');
+          if (rsInput) {
+            const cMatch = rsInput.id.match(/^react-select-(\d+)-input$/);
+            const container = (() => {
+              let p = n;
+              while (p && p !== document.body) {
+                if (p.id && !/^react-select-/.test(p.id)) return p;
+                p = p.parentElement;
+              }
+              return null;
+            })();
+            reactSelect = {
+              type: 'container',
+              selectNum: cMatch ? cMatch[1] : '',
+              containerName: container ? (container.id || '') : '',
+            };
+            break;
+          }
+          n = n.parentElement;
+        }
+      }
+
       this._sendAction({
         action,
         interactionType,
@@ -168,6 +216,7 @@
         value: target.value || null,
         checked: target.checked,
         valueBefore: this._valueBefore.get(target) ?? null,
+        reactSelect,
         timestamp: Date.now(),
       });
     },

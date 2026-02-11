@@ -464,6 +464,20 @@ class RecorderEngine extends EventEmitter {
 
       // ── Click / button / link ──────────────────────────────
       case 'click': {
+        // React-select dropdown: use container name as key, option text as value
+        const rs = rawAction.reactSelect;
+        if (rs) {
+          if (rs.type === 'option') {
+            const rsKey = (rs.containerName || `dropdown_${rs.selectNum}`)
+              .replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+            return { [rsKey]: rs.optionText || '' };
+          }
+          if (rs.type === 'container') {
+            const rsKey = (rs.containerName || `dropdown_${rs.selectNum}`)
+              .replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+            return { [rsKey]: true };
+          }
+        }
         if (ct === 'checkbox' || ct === 'toggle') return { [key]: !!rawAction.checked };
         if (ct === 'radio') return { [key]: rawAction.value || '' };
         return { [key]: true };
