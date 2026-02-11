@@ -30,6 +30,15 @@ class RecorderEngine extends EventEmitter {
     // Key: "elementId|action" → { timestamp, step }
     this._recentActions = new Map();
     this._DEDUP_WINDOW_MS = 600; // Merge events within this window
+
+    // Pending text-input click — held until we know whether the user is
+    // typing (discard click) or interacting with a different element (keep click).
+    this._pendingTextClick = null;
+
+    // Last text-input step per element — used to update (replace) the value
+    // when the debounced input fires again with a more complete value.
+    // Key: dedupKey → { stepId, flowId }
+    this._lastTextInputStep = new Map();
   }
 
   /**
@@ -75,6 +84,10 @@ class RecorderEngine extends EventEmitter {
    */
   async stopRecording() {
     if (this.state === 'idle') return { success: false, message: 'Not recording' };
+
+    // Flush any pending text-input click before stopping
+    this._flushPendingTextClick();
+    this._lastTextInputStep.clear();
 
     await this.browserEngine.executeScript('window.__testflow_recorder?.stop()');
     this._teardownActionListener();
@@ -143,10 +156,41 @@ class RecorderEngine extends EventEmitter {
   _processAction(rawAction) {
     if (this.state !== 'recording') return null;
 
-    // ── Deduplication ──────────────────────────────────────────
     const dedupKey = this._dedupKey(rawAction);
     const now = Date.now();
+    const el = rawAction.element || {};
+    const tag = (el.tag || '').toLowerCase();
+    const type = (el.type || '').toLowerCase();
+    const curAction = rawAction.action;
 
+    // ── Pending text-input click buffer ────────────────────────
+    // Clicks on text inputs are deferred — if an input/change event follows
+    // on the SAME element, the click is discarded (user just focused to type).
+    // If the next action is on a DIFFERENT element, the click is emitted
+    // (it may have opened a datepicker, dropdown, etc.).
+    const isTextInputClick = !this._flushing && curAction === 'click' &&
+      tag === 'input' && this._TEXT_TYPES_SET.has(type);
+
+    if (isTextInputClick) {
+      // Flush any existing pending click first (different element)
+      this._flushPendingTextClick();
+      this._pendingTextClick = rawAction;
+      return null; // Don't process yet
+    }
+
+    // Check if the pending click should be flushed or discarded
+    if (this._pendingTextClick) {
+      const pendingKey = this._dedupKey(this._pendingTextClick);
+      if (pendingKey && dedupKey && pendingKey === dedupKey) {
+        // Same element → discard the click (user is typing, not opening a popup)
+        this._pendingTextClick = null;
+      } else {
+        // Different element → emit the click (it opened a datepicker etc.)
+        this._flushPendingTextClick();
+      }
+    }
+
+    // ── Standard deduplication ────────────────────────────────
     // Purge stale entries
     for (const [k, v] of this._recentActions) {
       if (now - v.timestamp > this._DEDUP_WINDOW_MS) this._recentActions.delete(k);
@@ -156,7 +200,6 @@ class RecorderEngine extends EventEmitter {
       const prev = this._recentActions.get(dedupKey);
       if (prev && (now - prev.timestamp) < this._DEDUP_WINDOW_MS) {
         const prevAction = prev.action;
-        const curAction = rawAction.action;
         const curIt = (rawAction.interactionType || '').toLowerCase();
 
         // Suppress duplicate toggle/checkbox events on the same element
@@ -167,15 +210,42 @@ class RecorderEngine extends EventEmitter {
 
         // Suppress change event when input already captured the text value
         if (curAction === 'change' && prevAction === 'input') {
-          const el = rawAction.element || {};
-          const tag = (el.tag || '').toLowerCase();
-          const type = (el.type || '').toLowerCase();
+          if (tag === 'input' && this._TEXT_TYPES_SET.has(type)) return null;
+          if (tag === 'textarea') return null;
+        }
+        // Suppress input event when change already captured the text value
+        // (change fires on blur BEFORE the debounced input timer)
+        if (curAction === 'input' && prevAction === 'change') {
           if (tag === 'input' && this._TEXT_TYPES_SET.has(type)) return null;
           if (tag === 'textarea') return null;
         }
       }
+
+      // ── Text-input step replacement ──────────────────────────
+      // When a new debounced input arrives for the SAME text element, update
+      // the previous step's value instead of creating a duplicate step.
+      if (curAction === 'input' && (tag === 'input' || tag === 'textarea')) {
+        const prevText = this._lastTextInputStep.get(dedupKey);
+        if (prevText) {
+          try {
+            const newTestData = this._extractTestData(rawAction);
+            const newDesc = this._generateDescription(rawAction);
+            this.flowEngine.updateStep(prevText.flowId, prevText.stepId, {
+              testData: newTestData,
+              description: newDesc,
+            });
+            // Update dedup tracking
+            this._recentActions.set(dedupKey, { timestamp: now, action: curAction });
+            return null; // Don't create a new step
+          } catch (e) {
+            // Step may have been deleted — fall through to create a new one
+            this._lastTextInputStep.delete(dedupKey);
+          }
+        }
+      }
+
       // Record this action for future dedup checks
-      this._recentActions.set(dedupKey, { timestamp: now, action: rawAction.action });
+      this._recentActions.set(dedupKey, { timestamp: now, action: curAction });
     }
 
     this.stepCounter++;
@@ -228,8 +298,30 @@ class RecorderEngine extends EventEmitter {
     // Add step to flow
     this.flowEngine.addStep(this.currentFlowId, step);
 
+    // Track text-input steps for value replacement on subsequent debounce fires
+    if (rawAction.action === 'input' && (tag === 'input' || tag === 'textarea') && dedupKey) {
+      this._lastTextInputStep.set(dedupKey, {
+        stepId: step.id,
+        flowId: this.currentFlowId,
+      });
+    }
+
     this.emit('action-recorded', step);
     return step;
+  }
+
+  /**
+   * Flush a pending text-input click — emit it as a real step.
+   */
+  _flushPendingTextClick() {
+    if (!this._pendingTextClick) return;
+    const raw = this._pendingTextClick;
+    this._pendingTextClick = null;
+    // Re-enter _processAction but skip the pending-click check
+    // by using a flag to avoid infinite recursion
+    this._flushing = true;
+    this._processAction(raw);
+    this._flushing = false;
   }
 
   /**

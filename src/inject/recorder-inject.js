@@ -118,7 +118,10 @@
 
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
-      if (tag === 'input' && this._TEXT_TYPES.has(type)) return;
+      // DON'T filter text input clicks — the click may open a datepicker, 
+      // autocomplete dropdown, or have other side effects.  The recorder-engine's
+      // pending-click buffer will suppress clicks that are immediately followed
+      // by typing (input events) on the same element.
       if (tag === 'textarea') return;
       // Skip <option> AND <select> clicks — the change handler captures the
       // actual selection intent.  Clicking a native <select> opens a blocking
@@ -238,6 +241,12 @@
     },
 
     // ─── Change Handler (select, checkbox, radio, file, etc.) ─
+    // Basic text types where the debounced input handler captures values —
+    // suppress change events for these to avoid duplicate steps.
+    _BASIC_TEXT_TYPES: new Set([
+      'text', 'password', 'email', 'search', 'tel', 'url', 'number',
+    ]),
+
     _handleChange(e) {
       if (!this.active || this.paused) return;
       const target = e.target;
@@ -246,6 +255,12 @@
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
       const before = this._valueBefore.get(target) ?? '';
+
+      // Suppress change events for basic text inputs and textareas — the
+      // debounced input handler already captures the typed value.  change fires
+      // on blur and creates duplicate steps.
+      if (tag === 'input' && this._BASIC_TEXT_TYPES.has(type)) return;
+      if (tag === 'textarea') return;
 
       if (tag === 'select') {
         const selectedOption = target.options[target.selectedIndex];

@@ -416,6 +416,30 @@ class ReplayEngine extends EventEmitter {
       case 'select': {
         const value = Object.values(step.testData || {})[0] || '';
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+        // If the select element is inside a datepicker popup that may be closed,
+        // try to open it by clicking the associated date input first.
+        const elExists = await this.browserEngine.executeScript(`!!${locatorJs}`);
+        if (!elExists) {
+          // Look for datepicker-related classes in any locator
+          const isDatepicker = (step.locators || step.element?.classes || []).some(l => {
+            const v = l.value || l;
+            return typeof v === 'string' && v.includes('datepicker');
+          });
+          if (isDatepicker || (step.element?.classes || []).some(c => c.includes('datepicker'))) {
+            // Try clicking the dateOfBirth input or any react-datepicker input to open the popup
+            await this.browserEngine.executeScript(`
+              (() => {
+                const dpInput = document.querySelector('.react-datepicker-wrapper input') ||
+                                document.querySelector('input[id*="date" i]') ||
+                                document.querySelector('input[id*="Date" i]');
+                if (dpInput) dpInput.click();
+              })()
+            `);
+            await this._sleep(500); // Wait for datepicker popup to render
+          }
+        }
+
         await this._visualMoveAndHighlight(locatorJs, `select: "${value}"`);
         await this._visualClickRipple();
         // Perform the actual selection with value-attribute → display-text fallback
