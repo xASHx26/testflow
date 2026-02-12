@@ -1,33 +1,56 @@
 /**
  * TestFlow — Workspace Presets
  * 
- * Manages panel layout presets:
- *   - recorder: left + bottom open, right collapsed
- *   - inspector: left + right open, bottom collapsed
- *   - debug: all panels open
- *   - review: right + bottom open, left collapsed
- *   - browser-only: all panels hidden, full browser
- *   - browser-inspector: browser + right panel only
- *   - browser-flows: browser + left panel only
- *   - compact: left + bottom, no right
- *   - full: all panels open (alias for debug)
+ * Manages panel layout presets and pop-out panel windows.
+ * 
+ * Modes:
+ *   - recorder:          left + bottom (record flows & see console)
+ *   - inspector:         left + right (record & inspect elements)
+ *   - debug:             all panels (full debugging view)
+ *   - review:            right + bottom (review results)
+ * 
+ * Layouts (Browser + …):
+ *   - browser-only:      all panels hidden — full browser
+ *   - browser-inspector: right panel only
+ *   - browser-flows:     left panel only
+ *   - browser-console:   bottom panel only
+ * 
+ * Two-panel combos:
+ *   - flows-inspector:   left + right
+ *   - flows-console:     left + bottom
+ *   - inspector-console: right + bottom
+ * 
+ * Quick aliases:
+ *   - focus:   same as browser-only
+ *   - compact: left + bottom
+ *   - full:    all panels
  */
 
 class Workspace {
   constructor() {
     this.presets = {
-      recorder:           { left: true,  right: false, bottom: true  },
-      inspector:          { left: true,  right: true,  bottom: false },
-      debug:              { left: true,  right: true,  bottom: true  },
-      review:             { left: false, right: true,  bottom: true  },
-      'browser-only':     { left: false, right: false, bottom: false },
-      'browser-inspector':{ left: false, right: true,  bottom: false },
-      'browser-flows':    { left: true,  right: false, bottom: false },
-      compact:            { left: true,  right: false, bottom: true  },
-      full:               { left: true,  right: true,  bottom: true  },
+      // Modes
+      recorder:             { left: true,  right: false, bottom: true  },
+      inspector:            { left: true,  right: true,  bottom: false },
+      debug:                { left: true,  right: true,  bottom: true  },
+      review:               { left: false, right: true,  bottom: true  },
+      // Single panel + Browser
+      'browser-only':       { left: false, right: false, bottom: false },
+      'browser-inspector':  { left: false, right: true,  bottom: false },
+      'browser-flows':      { left: true,  right: false, bottom: false },
+      'browser-console':    { left: false, right: false, bottom: true  },
+      // Two-panel combos
+      'flows-inspector':    { left: true,  right: true,  bottom: false },
+      'flows-console':      { left: true,  right: false, bottom: true  },
+      'inspector-console':  { left: false, right: true,  bottom: true  },
+      // Aliases
+      focus:                { left: false, right: false, bottom: false },
+      compact:              { left: true,  right: false, bottom: true  },
+      full:                 { left: true,  right: true,  bottom: true  },
     };
 
     this.currentPreset = 'debug';
+    this._poppedOutPanels = new Set();
     this._listen();
   }
 
@@ -52,29 +75,60 @@ class Workspace {
   }
 
   /**
+   * Map of pop-out panel type to the main layout panel it belongs to.
+   * Some types hide the entire panel, others just indicate a tab was detached.
+   */
+  _getPanelHideTarget(panelType) {
+    const hideEntire = {
+      browser:      'browser',
+      flows:        'left',
+      inspector:    'right',
+      testdata:     'right',
+      console:      'bottom',
+      network:      'bottom',
+      'replay-log': 'bottom',
+      'bottom-all': 'bottom',
+      'right-all':  'right',
+    };
+    return hideEntire[panelType] || null;
+  }
+
+  /**
+   * Friendly display name for pop-out panels.
+   */
+  _panelLabel(panelType) {
+    const labels = {
+      browser:      'Browser',
+      flows:        'Test Flows',
+      inspector:    'Inspector',
+      testdata:     'Test Data',
+      console:      'Console',
+      network:      'Network',
+      'replay-log': 'Replay Log',
+      'bottom-all': 'Console + Network + Replay Log',
+      'right-all':  'Inspector + Test Data',
+    };
+    return labels[panelType] || panelType;
+  }
+
+  /**
    * Called when a panel has been popped out — hide it from the main layout
    */
   _onPanelPoppedOut(panelType) {
-    const panelMap = {
-      browser:   'browser',
-      inspector: 'right',
-      console:   'bottom',
-    };
-    const panelName = panelMap[panelType];
-    if (panelName && panelName !== 'browser') {
-      window.PanelManager.hidePanel(panelName);
-    }
-    if (panelName === 'browser') {
-      // Hide the browser panel placeholder since BrowserView moved
+    const target = this._getPanelHideTarget(panelType);
+
+    if (target === 'browser') {
       const bp = document.getElementById('panel-browser');
       if (bp) bp.classList.add('popped-out');
+    } else if (target) {
+      window.PanelManager.hidePanel(target);
     }
-    this._poppedOutPanels = this._poppedOutPanels || new Set();
+
     this._poppedOutPanels.add(panelType);
 
     window.EventBus.emit('console:log', {
       level: 'info',
-      message: `📌 ${panelType} panel popped out to separate window`,
+      message: `📌 ${this._panelLabel(panelType)} popped out to separate window`,
       timestamp: Date.now(),
     });
   }
@@ -83,26 +137,21 @@ class Workspace {
    * Called when a panel has been docked back — restore it in the main layout
    */
   _onPanelDocked(panelType) {
-    const panelMap = {
-      browser:   'browser',
-      inspector: 'right',
-      console:   'bottom',
-    };
-    const panelName = panelMap[panelType];
-    if (panelName && panelName !== 'browser') {
-      window.PanelManager.showPanel(panelName);
-    }
-    if (panelName === 'browser') {
+    const target = this._getPanelHideTarget(panelType);
+
+    if (target === 'browser') {
       const bp = document.getElementById('panel-browser');
       if (bp) bp.classList.remove('popped-out');
-      // Recalculate browser bounds
       setTimeout(() => window.PanelManager._updateBrowserBounds(), 300);
+    } else if (target) {
+      window.PanelManager.showPanel(target);
     }
-    if (this._poppedOutPanels) this._poppedOutPanels.delete(panelType);
+
+    this._poppedOutPanels.delete(panelType);
 
     window.EventBus.emit('console:log', {
       level: 'info',
-      message: `⬅ ${panelType} panel docked back`,
+      message: `⬅ ${this._panelLabel(panelType)} docked back`,
       timestamp: Date.now(),
     });
   }

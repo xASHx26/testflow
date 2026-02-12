@@ -614,13 +614,14 @@ function registerIpcHandlers(context) {
     return true;
   });
 
-  ipcMain.handle('popout:dock', async () => {
-    windowManager.dockPopoutWindow();
+  ipcMain.handle('popout:dock', async (event) => {
+    // Identify which popout window sent this by matching webContents
+    windowManager.dockPopoutWindow(null, event.sender);
     return true;
   });
 
   ipcMain.handle('popout:getPanel', async () => {
-    return windowManager.getActivePopout();
+    return windowManager.getActivePopouts();
   });
 }
 

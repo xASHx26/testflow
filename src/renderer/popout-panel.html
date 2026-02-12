@@ -184,53 +184,59 @@
     const contentEl = document.getElementById('popout-content');
 
     const titles = {
-      browser:   'Browser View',
-      inspector: 'Element Inspector',
-      console:   'Console & Logs',
+      browser:      'Browser View',
+      flows:        'Test Flows',
+      inspector:    'Element Inspector',
+      testdata:     'Test Data',
+      console:      'Console',
+      network:      'Network',
+      'replay-log': 'Replay Log',
+      'bottom-all': 'Console · Network · Replay Log',
+      'right-all':  'Inspector · Test Data',
+    };
+
+    const icons = {
+      browser:      '🌐',
+      flows:        '📂',
+      inspector:    '🔍',
+      testdata:     '📊',
+      console:      '📋',
+      network:      '🌐',
+      'replay-log': '▶️',
+      'bottom-all': '📋',
+      'right-all':  '🔍',
+    };
+
+    const descriptions = {
+      browser:      'The embedded browser has been moved to this window.',
+      flows:        'Test flows and steps panel is now on this window.',
+      inspector:    'Element inspection data will appear here as you inspect elements.',
+      testdata:     'Test data panel is now on this window.',
+      console:      'Console output will appear here.',
+      network:      'Network requests will appear here.',
+      'replay-log': 'Replay log and test case execution results will appear here.',
+      'bottom-all': 'Console, network, and replay log panels are now on this window.',
+      'right-all':  'Inspector and test data panels are now on this window.',
     };
 
     titleEl.textContent = titles[panelType] || 'Panel';
     document.title = `TestFlow — ${titles[panelType] || 'Panel'}`;
 
-    // Build appropriate content depending on panel type
+    // Build content depending on panel type
     if (panelType === 'browser') {
       contentEl.classList.add('browser-host');
-      contentEl.innerHTML = `
-        <div class="popout-status">
-          <div class="popout-status-inner">
-            <div class="status-icon">🌐</div>
-            <div>Browser view is now on this window</div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
-              The embedded browser has been moved to this window.<br>
-              Click <strong>Dock</strong> to return it to the main IDE.
-            </div>
-          </div>
-        </div>`;
-    } else if (panelType === 'inspector') {
-      contentEl.innerHTML = `
-        <div class="popout-status">
-          <div class="popout-status-inner">
-            <div class="status-icon">🔍</div>
-            <div>Inspector panel detached</div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
-              Element inspection data will appear here as you inspect elements in the browser.<br>
-              Click <strong>Dock</strong> to return this panel to the main IDE.
-            </div>
-          </div>
-        </div>`;
-    } else if (panelType === 'console') {
-      contentEl.innerHTML = `
-        <div class="popout-status">
-          <div class="popout-status-inner">
-            <div class="status-icon">📋</div>
-            <div>Console & Logs panel detached</div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
-              Console output, network requests, and replay logs will appear here.<br>
-              Click <strong>Dock</strong> to return this panel to the main IDE.
-            </div>
-          </div>
-        </div>`;
     }
+
+    contentEl.innerHTML = `
+      <div class="popout-status">
+        <div class="popout-status-inner">
+          <div class="status-icon">${icons[panelType] || '📌'}</div>
+          <div>${descriptions[panelType] || 'Panel detached.'}</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+            Click <strong>Dock</strong> to return it to the main IDE.
+          </div>
+        </div>
+      </div>`;
 
     // Dock button — send IPC to dock back
     document.getElementById('btn-dock').addEventListener('click', () => {

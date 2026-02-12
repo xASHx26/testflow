@@ -111,55 +111,116 @@ function buildAppMenu(context) {
       label: 'Workspace',
       submenu: [
         {
-          label: 'Recorder Mode',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'recorder'),
+          label: 'Modes',
+          submenu: [
+            {
+              label: 'Recorder Mode',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'recorder'),
+            },
+            {
+              label: 'Inspector Mode',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'inspector'),
+            },
+            {
+              label: 'Debug Mode',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'debug'),
+            },
+            {
+              label: 'Review Mode',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'review'),
+            },
+          ],
         },
         {
-          label: 'Inspector Mode',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'inspector'),
-        },
-        {
-          label: 'Debug Mode',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'debug'),
-        },
-        {
-          label: 'Review Mode',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'review'),
+          label: 'Layouts',
+          submenu: [
+            {
+              label: 'Browser Only',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-only'),
+            },
+            {
+              label: 'Browser + Inspector',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-inspector'),
+            },
+            {
+              label: 'Browser + Flows',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-flows'),
+            },
+            {
+              label: 'Browser + Console',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-console'),
+            },
+            {
+              label: 'Flows + Inspector',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'flows-inspector'),
+            },
+            {
+              label: 'Flows + Console',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'flows-console'),
+            },
+            {
+              label: 'Inspector + Console',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'inspector-console'),
+            },
+            { type: 'separator' },
+            {
+              label: 'Focus Mode (Browser Only)',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'focus'),
+            },
+            {
+              label: 'Compact (Flows + Console)',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'compact'),
+            },
+            {
+              label: 'Full IDE (All Panels)',
+              click: () => windowManager.sendToRenderer('menu:workspace-preset', 'full'),
+            },
+          ],
         },
         { type: 'separator' },
         {
-          label: 'Browser Only',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-only'),
-        },
-        {
-          label: 'Browser + Inspector',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-inspector'),
-        },
-        {
-          label: 'Browser + Flows',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-flows'),
-        },
-        {
-          label: 'Compact',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'compact'),
-        },
-        {
-          label: 'Full IDE',
-          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'full'),
-        },
-        { type: 'separator' },
-        {
-          label: 'Pop Out Browser',
-          accelerator: 'CmdOrCtrl+Shift+B',
-          click: () => windowManager.sendToRenderer('menu:popout-panel', 'browser'),
-        },
-        {
-          label: 'Pop Out Inspector',
-          click: () => windowManager.sendToRenderer('menu:popout-panel', 'inspector'),
-        },
-        {
-          label: 'Pop Out Console',
-          click: () => windowManager.sendToRenderer('menu:popout-panel', 'console'),
+          label: 'Pop Out Panels',
+          submenu: [
+            {
+              label: 'Pop Out Browser',
+              accelerator: 'CmdOrCtrl+Shift+B',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'browser'),
+            },
+            {
+              label: 'Pop Out Test Flows',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'flows'),
+            },
+            {
+              label: 'Pop Out Inspector',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'inspector'),
+            },
+            {
+              label: 'Pop Out Test Data',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'testdata'),
+            },
+            { type: 'separator' },
+            {
+              label: 'Pop Out Console',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'console'),
+            },
+            {
+              label: 'Pop Out Network',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'network'),
+            },
+            {
+              label: 'Pop Out Replay Log',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'replay-log'),
+            },
+            { type: 'separator' },
+            {
+              label: 'Pop Out All Bottom Panels',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'bottom-all'),
+            },
+            {
+              label: 'Pop Out All Right Panels',
+              click: () => windowManager.sendToRenderer('menu:popout-panel', 'right-all'),
+            },
+          ],
         },
       ],
     },

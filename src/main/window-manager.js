@@ -494,7 +494,8 @@ class WindowManager {
 
   /**
    * Open a panel in its own separate window (for multi-monitor use).
-   * Supported panels: 'browser', 'inspector', 'console'
+   * Supported panels: browser, flows, inspector, testdata, console, network,
+   *                   replay-log, bottom-all, right-all
    */
   openPopoutWindow(panelType) {
     // If this panel is already popped out, focus it
@@ -504,9 +505,15 @@ class WindowManager {
     }
 
     const sizes = {
-      browser:   { width: 1024, height: 768 },
-      inspector: { width: 420,  height: 600 },
-      console:   { width: 800,  height: 400 },
+      browser:      { width: 1024, height: 768 },
+      flows:        { width: 340,  height: 600 },
+      inspector:    { width: 420,  height: 600 },
+      testdata:     { width: 420,  height: 500 },
+      console:      { width: 800,  height: 400 },
+      network:      { width: 900,  height: 450 },
+      'replay-log': { width: 900,  height: 500 },
+      'bottom-all': { width: 960,  height: 480 },
+      'right-all':  { width: 460,  height: 620 },
     };
 
     const size = sizes[panelType] || { width: 800, height: 600 };
@@ -578,7 +585,8 @@ class WindowManager {
     });
 
     this.popoutWindows[panelType] = popoutWindow;
-    this._activePopout = panelType;
+    // Track which panel type each window belongs to (for dock IPC)
+    popoutWindow._panelType = panelType;
 
     // Tell the renderer to hide the panel area since it's popped out
     this.sendToRenderer('popout:opened', panelType);
@@ -588,9 +596,20 @@ class WindowManager {
 
   /**
    * Dock a popped-out panel back into the main window.
+   * If panelType is not given, it is resolved from the BrowserWindow that sent the IPC.
    */
-  dockPopoutWindow(panelType) {
-    const pType = panelType || this._activePopout;
+  dockPopoutWindow(panelType, senderWebContents) {
+    let pType = panelType;
+
+    // Resolve from the sender if not explicitly provided
+    if (!pType && senderWebContents) {
+      for (const [key, win] of Object.entries(this.popoutWindows)) {
+        if (win && !win.isDestroyed() && win.webContents === senderWebContents) {
+          pType = key;
+          break;
+        }
+      }
+    }
     if (!pType) return;
 
     const win = this.popoutWindows[pType];
@@ -625,10 +644,12 @@ class WindowManager {
   }
 
   /**
-   * Get the panel type of the currently active popout (if any).
+   * Get all currently popped-out panel types.
    */
-  getActivePopout() {
-    return this._activePopout;
+  getActivePopouts() {
+    return Object.keys(this.popoutWindows).filter(
+      k => this.popoutWindows[k] && !this.popoutWindows[k].isDestroyed()
+    );
   }
 
   /**
