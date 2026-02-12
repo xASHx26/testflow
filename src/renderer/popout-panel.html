@@ -77,29 +77,13 @@
     .popout-content {
       height: calc(100% - 34px);
       overflow: auto;
+      display: flex;
+      flex-direction: column;
     }
 
-    /* When hosting the browser view, the content is the BrowserView itself */
-    .popout-content.browser-host {
-      background: #fff;
-    }
+    .popout-content.browser-host { background: #fff; }
 
-    /* Inspector panel in pop-out */
-    .popout-content .inspector-content,
-    .popout-content .locator-list,
-    .popout-content .testdata-content {
-      padding: 8px;
-    }
-
-    /* Console/Network panel in pop-out */
-    .popout-content .console-output,
-    .popout-content .network-output,
-    .popout-content .replay-log-output {
-      height: 100%;
-      overflow: auto;
-    }
-
-    /* Tab bar within pop-out */
+    /* ─── Tab bar ──────────────────────────────────────── */
     .popout-tabs {
       display: flex;
       align-items: center;
@@ -107,6 +91,7 @@
       padding: 4px 8px;
       background: var(--bg-surface);
       border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
     }
 
     .popout-tab {
@@ -132,32 +117,64 @@
 
     .popout-pane {
       display: none;
-      height: calc(100% - 36px);
+      flex: 1;
       overflow: auto;
     }
 
     .popout-pane.active {
-      display: block;
-    }
-
-    /* Status message */
-    .popout-status {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--text-muted);
-      font-size: 13px;
+      flex-direction: column;
     }
 
-    .popout-status .status-icon {
-      font-size: 32px;
-      margin-bottom: 8px;
-    }
+    /* ─── Console renderer ─────────────────────────────── */
+    .po-console { flex:1; overflow-y:auto; padding:4px 8px; font-family:var(--font-mono); font-size:var(--font-size-sm); line-height:1.7; }
+    .po-console .entry { display:flex; align-items:flex-start; gap:8px; padding:2px 6px; border-bottom:1px solid var(--bg-surface); }
+    .po-console .entry:hover { background:var(--bg-hover); }
+    .po-console .time { color:var(--text-dim); font-size:10px; min-width:65px; flex-shrink:0; }
+    .po-console .level { font-size:10px; font-weight:600; min-width:50px; flex-shrink:0; text-transform:uppercase; }
+    .po-console .level.info    { color:var(--accent-blue); }
+    .po-console .level.warning { color:var(--color-warning); }
+    .po-console .level.error   { color:var(--color-error); }
+    .po-console .level.verbose { color:var(--text-dim); }
+    .po-console .level.recorder{ color:var(--accent-mauve); }
+    .po-console .level.replay  { color:var(--accent-green); }
+    .po-console .msg { color:var(--text-primary); word-break:break-word; flex:1; }
 
-    .popout-status-inner {
-      text-align: center;
-    }
+    /* ─── Network renderer ─────────────────────────────── */
+    .po-network { flex:1; overflow:auto; }
+    .po-network table { width:100%; border-collapse:collapse; font-size:var(--font-size-sm); font-family:var(--font-mono); }
+    .po-network thead { background:var(--bg-secondary); position:sticky; top:0; }
+    .po-network th { padding:6px 8px; text-align:left; color:var(--text-muted); font-weight:600; font-size:10px; text-transform:uppercase; border-bottom:1px solid var(--border-color); }
+    .po-network td { padding:4px 8px; color:var(--text-secondary); border-bottom:1px solid var(--bg-surface); max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .po-network tr:hover td { background:var(--bg-hover); }
+    .po-network .m-get  { color:var(--color-success); font-weight:600; }
+    .po-network .m-post { color:var(--color-warning); font-weight:600; }
+    .po-network .s-2xx  { color:var(--color-success); font-weight:600; }
+    .po-network .s-3xx  { color:var(--color-warning); font-weight:600; }
+    .po-network .s-4xx  { color:var(--color-error); font-weight:600; }
+    .po-network .s-5xx  { color:#ef4444; font-weight:600; }
+
+    /* ─── Inspector renderer ───────────────────────────── */
+    .po-inspector { flex:1; overflow-y:auto; padding:8px; font-size:var(--font-size-sm); }
+    .po-inspector .elem-section { margin-bottom:12px; }
+    .po-inspector .elem-label { font-size:10px; font-weight:600; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px; }
+    .po-inspector .elem-value { font-family:var(--font-mono); font-size:12px; color:var(--text-primary); padding:4px 8px; background:var(--bg-surface); border-radius:4px; word-break:break-all; }
+
+    /* ─── Replay log renderer ──────────────────────────── */
+    .po-replay { flex:1; overflow-y:auto; padding:4px 8px; font-family:var(--font-mono); font-size:var(--font-size-sm); line-height:1.7; }
+    .po-replay .rlog-entry { display:flex; align-items:flex-start; gap:8px; padding:2px 6px; border-bottom:1px solid var(--bg-surface); }
+    .po-replay .rlog-icon { font-size:12px; }
+    .po-replay .rlog-msg  { color:var(--text-primary); flex:1; }
+    .rlog-pass .rlog-msg   { color:var(--color-success); }
+    .rlog-fail .rlog-msg   { color:var(--color-error); }
+
+    /* ─── Empty / waiting state ────────────────────────── */
+    .po-empty { display:flex; align-items:center; justify-content:center; flex:1; color:var(--text-muted); font-size:13px; text-align:center; padding:20px; }
+    .po-empty .ei { font-size:28px; margin-bottom:8px; }
+    .po-empty .eh { font-size:11px; color:var(--text-dim); margin-top:6px; }
+
+    /* ─── Badge ────────────────────────────────────────── */
+    .po-badge { background:var(--accent-blue); color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:8px; margin-left:4px; }
   </style>
 </head>
 <body>
@@ -167,22 +184,15 @@
       <button class="popout-btn popout-btn-dock" id="btn-dock" title="Dock back into main window">⬅ Dock</button>
     </div>
   </div>
-  <div class="popout-content" id="popout-content">
-    <div class="popout-status">
-      <div class="popout-status-inner">
-        <div class="status-icon">📌</div>
-        <div>Panel detached — content mirrors main window</div>
-      </div>
-    </div>
-  </div>
+  <div class="popout-content" id="popout-content"></div>
 
   <script>
-    // Panel type is passed via query param
     const params = new URLSearchParams(window.location.search);
     const panelType = params.get('panel') || 'unknown';
     const titleEl = document.getElementById('popout-title');
     const contentEl = document.getElementById('popout-content');
 
+    /* ── Title config ─────────────────────────────────── */
     const titles = {
       browser:      'Browser View',
       flows:        'Test Flows',
@@ -195,54 +205,316 @@
       'right-all':  'Inspector · Test Data',
     };
 
-    const icons = {
-      browser:      '🌐',
-      flows:        '📂',
-      inspector:    '🔍',
-      testdata:     '📊',
-      console:      '📋',
-      network:      '🌐',
-      'replay-log': '▶️',
-      'bottom-all': '📋',
-      'right-all':  '🔍',
-    };
-
-    const descriptions = {
-      browser:      'The embedded browser has been moved to this window.',
-      flows:        'Test flows and steps panel is now on this window.',
-      inspector:    'Element inspection data will appear here as you inspect elements.',
-      testdata:     'Test data panel is now on this window.',
-      console:      'Console output will appear here.',
-      network:      'Network requests will appear here.',
-      'replay-log': 'Replay log and test case execution results will appear here.',
-      'bottom-all': 'Console, network, and replay log panels are now on this window.',
-      'right-all':  'Inspector and test data panels are now on this window.',
-    };
-
     titleEl.textContent = titles[panelType] || 'Panel';
     document.title = `TestFlow — ${titles[panelType] || 'Panel'}`;
 
-    // Build content depending on panel type
-    if (panelType === 'browser') {
-      contentEl.classList.add('browser-host');
+    /* ════════════════════════════════════════════════════
+     *  BUILD LIVE CONTENT PER PANEL TYPE
+     * ════════════════════════════════════════════════════ */
+    function buildContent() {
+      /* ── Browser ─────────────────────────────────────── */
+      if (panelType === 'browser') {
+        contentEl.classList.add('browser-host');
+        contentEl.innerHTML = `<div class="po-empty"><div><div class="ei">🌐</div>
+          <div>Browser view is now on this window</div>
+          <div class="eh">The embedded browser has been moved here.<br>Click <strong>Dock</strong> to return it.</div></div></div>`;
+        return;
+      }
+
+      /* ── Flows / Test Data (no live stream) ──────────── */
+      if (panelType === 'flows') {
+        contentEl.innerHTML = `<div class="po-empty"><div><div class="ei">📂</div>
+          <div>Test Flows panel detached</div>
+          <div class="eh">Flows and steps are managed in the main IDE.<br>Click <strong>Dock</strong> to return.</div></div></div>`;
+        return;
+      }
+      if (panelType === 'testdata') {
+        contentEl.innerHTML = `<div class="po-empty"><div><div class="ei">📊</div>
+          <div>Test Data panel detached</div>
+          <div class="eh">Test data is managed in the main IDE.<br>Click <strong>Dock</strong> to return.</div></div></div>`;
+        return;
+      }
+
+      /* ── Console (live) ──────────────────────────────── */
+      if (panelType === 'console') {
+        contentEl.innerHTML = `<div class="po-console" id="live-console">
+          <div class="po-empty" id="console-empty"><div><div class="ei">📋</div><div>Waiting for console output…</div></div></div></div>`;
+        setupConsoleListener();
+        return;
+      }
+
+      /* ── Network (live) ──────────────────────────────── */
+      if (panelType === 'network') {
+        contentEl.innerHTML = `<div class="po-network" id="live-network">
+          <table><thead><tr><th>Method</th><th>URL</th><th>Status</th><th>Type</th><th>Size</th><th>Time</th></tr></thead>
+          <tbody id="net-body"></tbody></table>
+          <div class="po-empty" id="network-empty"><div><div class="ei">🌐</div><div>Waiting for network requests…</div></div></div></div>`;
+        setupNetworkListener();
+        return;
+      }
+
+      /* ── Replay Log (live) ───────────────────────────── */
+      if (panelType === 'replay-log') {
+        contentEl.innerHTML = `<div class="po-replay" id="live-replay">
+          <div class="po-empty" id="replay-empty"><div><div class="ei">▶️</div><div>Waiting for replay events…</div></div></div></div>`;
+        setupReplayListener();
+        return;
+      }
+
+      /* ── Inspector (live) ────────────────────────────── */
+      if (panelType === 'inspector') {
+        contentEl.innerHTML = `<div class="po-inspector" id="live-inspector">
+          <div class="po-empty" id="inspector-empty"><div><div class="ei">🔍</div><div>Enable the Inspector and hover over elements…</div></div></div></div>`;
+        setupInspectorListener();
+        return;
+      }
+
+      /* ── Right-All (Inspector + Test Data) ───────────── */
+      if (panelType === 'right-all') {
+        contentEl.innerHTML = `
+          <div class="popout-tabs">
+            <button class="popout-tab active" data-pane="rinsp">Inspector</button>
+            <button class="popout-tab" data-pane="rtd">Test Data</button>
+          </div>
+          <div class="popout-pane active" id="pane-rinsp">
+            <div class="po-inspector" id="live-inspector">
+              <div class="po-empty" id="inspector-empty"><div><div class="ei">🔍</div><div>Enable the Inspector and hover over elements…</div></div></div></div>
+          </div>
+          <div class="popout-pane" id="pane-rtd">
+            <div class="po-empty"><div><div class="ei">📊</div><div>Test data is managed in the main IDE.</div></div></div>
+          </div>`;
+        setupTabs();
+        setupInspectorListener();
+        return;
+      }
+
+      /* ── Bottom-All (Console + Network + Replay) ─────── */
+      if (panelType === 'bottom-all') {
+        contentEl.innerHTML = `
+          <div class="popout-tabs">
+            <button class="popout-tab active" data-pane="bcon">Console<span class="po-badge" id="badge-console" style="display:none">0</span></button>
+            <button class="popout-tab" data-pane="bnet">Network<span class="po-badge" id="badge-network" style="display:none">0</span></button>
+            <button class="popout-tab" data-pane="brep">Replay Log</button>
+          </div>
+          <div class="popout-pane active" id="pane-bcon">
+            <div class="po-console" id="live-console">
+              <div class="po-empty" id="console-empty"><div><div class="ei">📋</div><div>Waiting for console output…</div></div></div></div>
+          </div>
+          <div class="popout-pane" id="pane-bnet">
+            <div class="po-network" id="live-network">
+              <table><thead><tr><th>Method</th><th>URL</th><th>Status</th><th>Type</th><th>Size</th><th>Time</th></tr></thead>
+              <tbody id="net-body"></tbody></table>
+              <div class="po-empty" id="network-empty"><div><div class="ei">🌐</div><div>Waiting for network requests…</div></div></div></div>
+          </div>
+          <div class="popout-pane" id="pane-brep">
+            <div class="po-replay" id="live-replay">
+              <div class="po-empty" id="replay-empty"><div><div class="ei">▶️</div><div>Waiting for replay events…</div></div></div></div>
+          </div>`;
+        setupTabs();
+        setupConsoleListener();
+        setupNetworkListener();
+        setupReplayListener();
+        return;
+      }
+
+      /* ── Fallback ────────────────────────────────────── */
+      contentEl.innerHTML = `<div class="po-empty"><div><div class="ei">📌</div>
+        <div>Panel detached</div>
+        <div class="eh">Click <strong>Dock</strong> to return it to the main IDE.</div></div></div>`;
     }
 
-    contentEl.innerHTML = `
-      <div class="popout-status">
-        <div class="popout-status-inner">
-          <div class="status-icon">${icons[panelType] || '📌'}</div>
-          <div>${descriptions[panelType] || 'Panel detached.'}</div>
-          <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
-            Click <strong>Dock</strong> to return it to the main IDE.
-          </div>
-        </div>
-      </div>`;
+    /* ── Tab switching ─────────────────────────────────── */
+    function setupTabs() {
+      contentEl.querySelectorAll('.popout-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          contentEl.querySelectorAll('.popout-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          contentEl.querySelectorAll('.popout-pane').forEach(p => p.classList.remove('active'));
+          const pane = document.getElementById('pane-' + tab.dataset.pane);
+          if (pane) pane.classList.add('active');
+        });
+      });
+    }
 
-    // Dock button — send IPC to dock back
-    document.getElementById('btn-dock').addEventListener('click', () => {
-      if (window.popoutApi) {
-        window.popoutApi.dock();
+    /* ════════════════════════════════════════════════════
+     *  LIVE EVENT LISTENERS
+     * ════════════════════════════════════════════════════ */
+
+    /* ── Console ───────────────────────────────────────── */
+    function setupConsoleListener() {
+      const container = document.getElementById('live-console');
+      const empty = document.getElementById('console-empty');
+      const badge = document.getElementById('badge-console');
+      let count = 0;
+
+      window.popoutApi.on('console:log', (data) => {
+        if (empty) empty.style.display = 'none';
+        count++;
+        if (badge) { badge.style.display = ''; badge.textContent = count; }
+
+        const entry = document.createElement('div');
+        entry.className = 'entry';
+        const ts = new Date(data.timestamp || Date.now());
+        const time = ts.toLocaleTimeString('en', { hour12: false });
+        entry.innerHTML = `<span class="time">${time}</span>` +
+          `<span class="level ${data.level || 'info'}">${data.level || 'info'}</span>` +
+          `<span class="msg">${escHtml(data.message || data.text || JSON.stringify(data.args || data))}</span>`;
+        container.appendChild(entry);
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+
+    /* ── Network ───────────────────────────────────────── */
+    function setupNetworkListener() {
+      const tbody = document.getElementById('net-body');
+      const empty = document.getElementById('network-empty');
+      const badge = document.getElementById('badge-network');
+      let count = 0;
+
+      window.popoutApi.on('network:request', (data) => {
+        if (empty) empty.style.display = 'none';
+        count++;
+        if (badge) { badge.style.display = ''; badge.textContent = count; }
+
+        const m = (data.method || 'GET').toUpperCase();
+        const s = data.statusCode || data.status || 0;
+        const sc = s >= 500 ? 's-5xx' : s >= 400 ? 's-4xx' : s >= 300 ? 's-3xx' : s >= 200 ? 's-2xx' : '';
+        const mc = m === 'GET' ? 'm-get' : m === 'POST' ? 'm-post' : '';
+        const dur = data.duration || data.time || '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="${mc}">${m}</td>` +
+          `<td title="${escHtml(data.url || '')}">${escHtml(truncUrl(data.url || ''))}</td>` +
+          `<td class="${sc}">${data.error ? 'ERR' : (s || '—')}</td>` +
+          `<td>${escHtml(data.resourceType || data.type || '')}</td>` +
+          `<td>${fmtSize(data.size)}</td>` +
+          `<td>${dur ? dur + 'ms' : '—'}</td>`;
+        tbody.appendChild(tr);
+      });
+
+      window.popoutApi.on('network:clear', () => {
+        if (tbody) tbody.innerHTML = '';
+        if (empty) empty.style.display = '';
+        count = 0;
+        if (badge) { badge.style.display = 'none'; badge.textContent = '0'; }
+      });
+    }
+
+    /* ── Inspector ─────────────────────────────────────── */
+    function setupInspectorListener() {
+      const container = document.getElementById('live-inspector');
+      const empty = document.getElementById('inspector-empty');
+
+      function render(data) {
+        if (!data) return;
+        if (empty) empty.style.display = 'none';
+        let h = '';
+
+        // Element tag — data uses "tag" (not "tagName") and "classes" (array)
+        const tag = data.tag || data.tagName || '';
+        const cls = Array.isArray(data.classes) ? data.classes.join(' ') : (data.className || data.classes || '');
+        if (tag) {
+          h += `<div class="elem-section"><div class="elem-label">Element</div>
+            <div class="elem-value">&lt;${escHtml(tag)}${data.id ? ' id="'+escHtml(data.id)+'"' : ''}${cls ? ' class="'+escHtml(cls)+'"' : ''}&gt;</div></div>`;
+        }
+
+        // Text content
+        const txt = data.text || data.innerText || '';
+        if (txt) {
+          h += `<div class="elem-section"><div class="elem-label">Text</div>
+            <div class="elem-value">${escHtml(txt.substring(0, 200))}</div></div>`;
+        }
+
+        // Type / Name / Value
+        if (data.type)  h += sec('Type', data.type);
+        if (data.name)  h += sec('Name', data.name);
+        if (data.value) h += sec('Value', data.value);
+        if (data.href)  h += sec('Href', data.href);
+
+        // XPath
+        if (data.xpath) h += sec('XPath', data.xpath);
+        if (data.absoluteXpath) h += sec('Absolute XPath', data.absoluteXpath);
+
+        // CSS Selector
+        if (data.cssSelector) h += sec('CSS Selector', data.cssSelector);
+
+        // Aria
+        if (data.ariaLabel) h += sec('ARIA Label', data.ariaLabel);
+        if (data.ariaRole)  h += sec('ARIA Role', data.ariaRole);
+
+        // Test IDs
+        if (data['data-testid'])       h += sec('data-testid', data['data-testid']);
+        if (data['data-cy'])           h += sec('data-cy', data['data-cy']);
+        if (data['data-test'])         h += sec('data-test', data['data-test']);
+        if (data['data-automation-id'])h += sec('data-automation-id', data['data-automation-id']);
+
+        // All attributes
+        if (data.attributes && Object.keys(data.attributes).length) {
+          h += `<div class="elem-section"><div class="elem-label">All Attributes</div>`;
+          for (const [k, v] of Object.entries(data.attributes))
+            h += `<div class="elem-value" style="margin-bottom:2px"><strong>${escHtml(k)}</strong>: ${escHtml(v)}</div>`;
+          h += `</div>`;
+        }
+
+        // Dimensions
+        if (data.rect) {
+          h += `<div class="elem-section"><div class="elem-label">Position &amp; Size</div>
+            <div class="elem-value">${data.rect.width}×${data.rect.height} at (${data.rect.x}, ${data.rect.y})</div></div>`;
+        }
+
+        container.innerHTML = h || '<div class="po-empty"><div>No element data</div></div>';
       }
+
+      function sec(label, val) {
+        return `<div class="elem-section"><div class="elem-label">${escHtml(label)}</div><div class="elem-value">${escHtml(String(val))}</div></div>`;
+      }
+
+      window.popoutApi.on('inspector:element-hovered',  (d) => render(d));
+      window.popoutApi.on('inspector:element-selected', (d) => render(d));
+    }
+
+    /* ── Replay ────────────────────────────────────────── */
+    function setupReplayListener() {
+      const container = document.getElementById('live-replay');
+      const empty = document.getElementById('replay-empty');
+
+      function add(icon, msg, cls) {
+        if (empty) empty.style.display = 'none';
+        const div = document.createElement('div');
+        div.className = `rlog-entry ${cls || ''}`;
+        div.innerHTML = `<span class="rlog-icon">${icon}</span><span class="rlog-msg">${escHtml(msg)}</span>`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      window.popoutApi.on('replay:started', (d) => {
+        add('▶️', `Replay started${d?.flowName ? ': ' + d.flowName : ''}`, '');
+      });
+      window.popoutApi.on('replay:step-started', (d) => {
+        add('⏳', `Step ${d?.index !== undefined ? d.index + 1 : '?'}: ${d?.action || d?.type || 'running'}…`, '');
+      });
+      window.popoutApi.on('replay:step-completed', (d) => {
+        const ok = d?.success !== false;
+        add(ok ? '✅' : '❌', `Step ${d?.index !== undefined ? d.index + 1 : '?'}: ${ok ? 'passed' : 'failed'}${d?.error ? ' — ' + d.error : ''}`, ok ? 'rlog-pass' : 'rlog-fail');
+      });
+      window.popoutApi.on('replay:finished', (d) => {
+        add('🏁', `Replay finished — ${d?.passed || 0} passed, ${d?.failed || 0} failed`, '');
+      });
+      window.popoutApi.on('replay:error', (d) => {
+        add('🚨', `Error: ${d?.message || d?.error || 'Unknown'}`, 'rlog-fail');
+      });
+    }
+
+    /* ════════════════════════════════════════════════════
+     *  HELPERS
+     * ════════════════════════════════════════════════════ */
+    function escHtml(s) { const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
+    function truncUrl(u) { try { const p = new URL(u); return p.pathname + p.search; } catch (_) { return u.length > 60 ? u.substring(0, 57) + '…' : u; } }
+    function fmtSize(b) { if (!b && b !== 0) return ''; if (b < 1024) return b + 'B'; if (b < 1048576) return (b/1024).toFixed(1) + 'KB'; return (b/1048576).toFixed(1) + 'MB'; }
+
+    /* ── Init ──────────────────────────────────────────── */
+    buildContent();
+    document.getElementById('btn-dock').addEventListener('click', () => {
+      if (window.popoutApi) window.popoutApi.dock();
     });
   </script>
 </body>

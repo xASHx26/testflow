@@ -311,15 +311,14 @@ class Toolbar {
       if (this.isInspecting) {
         await window.testflow.inspector.enable();
         this.btnInspector.classList.add('active');
-        // Show the right panel with inspector tabs
+        // Show the right panel if hidden, uncollapse if collapsed
         window.PanelManager.showPanel('right');
         this._setStatus('inspecting', 'Inspector');
         this._log('info', 'Element Inspector enabled — hover to inspect');
       } else {
         await window.testflow.inspector.disable();
         this.btnInspector.classList.remove('active');
-        // Hide the right panel
-        window.PanelManager.hidePanel('right');
+        // Don't hide — just stop inspecting. Panel stays visible.
         this._setStatus('idle', 'Ready');
         this._log('info', 'Element Inspector disabled');
       }

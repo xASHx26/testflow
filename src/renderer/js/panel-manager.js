@@ -22,6 +22,8 @@ class PanelManager {
     this._browserViewSuppressed = false;
 
     this._setupBottomToggle();
+    this._setupLeftToggle();
+    this._setupRightToggle();
     this._setupTabs();
     this._setupResizeHandles();
     this._listenForResize();
@@ -54,6 +56,18 @@ class PanelManager {
     if (!panel) return;
     this.visibility[panelName] = true;
     panel.classList.remove('hidden');
+    panel.classList.remove('collapsed');
+    // Reset toggle button text
+    if (panelName === 'left') {
+      const btn = document.getElementById('btn-toggle-left');
+      if (btn) btn.textContent = '◀';
+    } else if (panelName === 'right') {
+      const btn = document.getElementById('btn-toggle-right');
+      if (btn) btn.textContent = '▶';
+    } else if (panelName === 'bottom') {
+      const btn = document.getElementById('btn-toggle-bottom');
+      if (btn) btn.textContent = '▼';
+    }
     // Delay bounds update to let CSS layout settle, then update again
     setTimeout(() => this._updateBrowserBounds(), 100);
     setTimeout(() => this._updateBrowserBounds(), 300);
@@ -84,6 +98,36 @@ class PanelManager {
         bottom.classList.toggle('collapsed');
         toggleBtn.textContent = bottom.classList.contains('collapsed') ? '▲' : '▼';
         this._updateBrowserBounds();
+      });
+    }
+  }
+
+  /**
+   * Setup left panel collapse toggle
+   */
+  _setupLeftToggle() {
+    const toggleBtn = document.getElementById('btn-toggle-left');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const left = this.panels.left;
+        left.classList.toggle('collapsed');
+        toggleBtn.textContent = left.classList.contains('collapsed') ? '▶' : '◀';
+        setTimeout(() => this._updateBrowserBounds(), 200);
+      });
+    }
+  }
+
+  /**
+   * Setup right panel collapse toggle
+   */
+  _setupRightToggle() {
+    const toggleBtn = document.getElementById('btn-toggle-right');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const right = this.panels.right;
+        right.classList.toggle('collapsed');
+        toggleBtn.textContent = right.classList.contains('collapsed') ? '◀' : '▶';
+        setTimeout(() => this._updateBrowserBounds(), 200);
       });
     }
   }

@@ -673,6 +673,37 @@ class WindowManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, ...args);
     }
+    // Also forward relevant events to popout windows
+    this._forwardToPopouts(channel, ...args);
+  }
+
+  /**
+   * Forward events to the appropriate popout windows so they get live data.
+   */
+  _forwardToPopouts(channel, ...args) {
+    // Map of channel prefixes → which popout panel types should receive them
+    const channelToPopouts = {
+      'console:log':               ['console', 'bottom-all'],
+      'network:request':           ['network', 'bottom-all'],
+      'network:clear':             ['network', 'bottom-all'],
+      'inspector:element-hovered': ['inspector', 'right-all'],
+      'inspector:element-selected':['inspector', 'right-all'],
+      'replay:step-started':       ['replay-log', 'bottom-all'],
+      'replay:step-completed':     ['replay-log', 'bottom-all'],
+      'replay:started':            ['replay-log', 'bottom-all'],
+      'replay:finished':           ['replay-log', 'bottom-all'],
+      'replay:error':              ['replay-log', 'bottom-all'],
+    };
+
+    const targets = channelToPopouts[channel];
+    if (!targets) return;
+
+    for (const pType of targets) {
+      const win = this.popoutWindows[pType];
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(channel, ...args);
+      }
+    }
   }
 }
 

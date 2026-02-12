@@ -253,6 +253,25 @@
   min-width: var(--panel-min-width);
   flex-shrink: 0;
   border-left: 1px solid var(--border-color);
+  transition: width 0.15s ease, min-width 0.15s ease;
+}
+
+.panel-right.collapsed {
+  width: 34px !important;
+  min-width: 34px !important;
+  overflow: hidden;
+}
+
+.panel-right.collapsed .tab-content {
+  display: none;
+}
+
+.panel-right.collapsed .panel-tab[data-tab] {
+  display: none;
+}
+
+.panel-right.collapsed .panel-tab-spacer {
+  display: none;
 }
 
 .panel-right .tab-content {
@@ -302,6 +321,37 @@
   flex: 1;
   border: none;
   min-width: 400px;
+}
+
+/* ─── Left Panel Collapse ─────────────────────────── */
+.panel-left {
+  transition: width 0.15s ease, min-width 0.15s ease;
+}
+
+.panel-left.collapsed {
+  width: 34px !important;
+  min-width: 34px !important;
+  overflow: hidden;
+}
+
+.panel-left.collapsed .flow-list,
+.panel-left.collapsed .flow-steps,
+.panel-left.collapsed .panel-header ~ .panel-header,
+.panel-left.collapsed .panel-header ~ .flow-list,
+.panel-left.collapsed .panel-header ~ .flow-steps {
+  display: none;
+}
+
+.panel-left.collapsed .panel-header .panel-title {
+  display: none;
+}
+
+.panel-left.collapsed .panel-header .panel-actions {
+  flex-direction: column;
+}
+
+.panel-left.collapsed #btn-new-flow {
+  display: none;
 }
 
 .panel-browser.popped-out {
