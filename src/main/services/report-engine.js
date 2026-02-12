@@ -31,7 +31,7 @@ class ReportEngine {
    * @param {string}   [opts.projectName]
    * @returns {{ reportDir: string, indexPath: string }}
    */
-  async generate(opts) {
+  async generate(opts, onProgress) {
     const {
       testCases   = [],
       results     = [],
@@ -40,6 +40,9 @@ class ReportEngine {
       finishedAt  = Date.now(),
       projectName = 'TestFlow Report',
     } = opts;
+
+    const _p = typeof onProgress === 'function' ? onProgress : () => {};
+    _p(5, 'Preparing output folder…');
 
     const settings = this.reportConfig.get();
 
@@ -56,34 +59,48 @@ class ReportEngine {
     if (settings.storage.autoTimestampFolder && settings.storage.retainLastN > 0) {
       this._pruneOldReports(baseDir, settings.storage.retainLastN);
     }
+    _p(15, 'Building data model…');
 
     // ── Build data model ─────────────────────────────────────
     const env = this._environment();
     const suiteData = this._buildSuiteData(testCases, results, screenshots, startedAt, finishedAt);
+    _p(30, 'Building data model…');
 
     // ── Write execution.json (optional) ──────────────────────
     if (settings.storage.includeRawJson) {
+      _p(35, 'Writing execution JSON…');
       const jsonPath = path.join(reportDir, 'execution.json');
       fs.writeFileSync(jsonPath, JSON.stringify({ env, ...suiteData }, null, 2), 'utf-8');
     }
 
     // ── Write screenshots to disk ────────────────────────────
     const screenshotDir = path.join(reportDir, 'screenshots');
-    if (Object.keys(screenshots).length > 0) {
+    const shotEntries = Object.entries(screenshots);
+    if (shotEntries.length > 0) {
+      _p(40, 'Saving screenshots…');
       if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir, { recursive: true });
-      for (const [id, shot] of Object.entries(screenshots)) {
+      for (let i = 0; i < shotEntries.length; i++) {
+        const [id, shot] = shotEntries[i];
         const fname = `${id}.png`;
         const buf = Buffer.isBuffer(shot.buffer)
           ? shot.buffer
           : Buffer.from(shot.base64 || '', 'base64');
         fs.writeFileSync(path.join(screenshotDir, fname), buf);
+        // progress from 40 → 70 across screenshots
+        const pct = 40 + Math.round(30 * (i + 1) / shotEntries.length);
+        _p(pct, `Saving screenshots… (${i + 1}/${shotEntries.length})`);
       }
+    } else {
+      _p(70, 'No screenshots to save');
     }
 
     // ── Render HTML ──────────────────────────────────────────
+    _p(75, 'Rendering HTML report…');
     const html = this._renderHtml(projectName, env, suiteData, screenshots);
+    _p(90, 'Writing report file…');
     const indexPath = path.join(reportDir, 'index.html');
     fs.writeFileSync(indexPath, html, 'utf-8');
+    _p(100, 'Done');
 
     return { reportDir, indexPath };
   }

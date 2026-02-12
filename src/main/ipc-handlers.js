@@ -528,7 +528,10 @@ function registerIpcHandlers(context) {
   // ─── Report Generation ────────────────────────────────────
   ipcMain.handle('report:generate', async (event, payload) => {
     try {
-      const result = await reportEngine.generate(payload);
+      const onProgress = (pct, label) => {
+        windowManager.sendToRenderer('report:progress', { pct, label });
+      };
+      const result = await reportEngine.generate(payload, onProgress);
       return { success: true, ...result };
     } catch (err) {
       console.error('[ReportEngine] Generation failed:', err);

@@ -160,6 +160,7 @@ contextBridge.exposeInMainWorld('testflow', {
       'menu:toggle-console', 'menu:toggle-network',
       'menu:about', 'menu:shortcuts',
       'menu:report-settings',
+      'report:progress',
       'console:log', 'network:request', 'network:clear',
       'workspace:preset-changed',
     ];
