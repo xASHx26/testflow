@@ -168,7 +168,3 @@ MIT
 5. Open a Pull Request
 
 ---
-
-<p align="center">
-  Built with ❤️ by <a href="https://github.com/xASHx26">xASHx26</a>
-</p>
