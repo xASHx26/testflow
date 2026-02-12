@@ -21,6 +21,8 @@ const { FreezeService } = require('./services/freeze-service');
 const { ExportEngine } = require('./services/export-engine');
 const { ShareService } = require('./services/share-service');
 const { AuthService } = require('./services/auth-service');
+const { ReportConfig } = require('./services/report-config');
+const { ReportEngine } = require('./services/report-engine');
 
 // ─── Application Singleton Context ───────────────────────────────
 const context = {
@@ -36,6 +38,8 @@ const context = {
   exportEngine: null,
   shareService: null,
   authService: null,
+  reportConfig: null,
+  reportEngine: null,
 };
 
 // ─── App Lifecycle ───────────────────────────────────────────────
@@ -52,6 +56,8 @@ app.whenReady().then(async () => {
   context.exportEngine = new ExportEngine();
   context.shareService = new ShareService();
   context.authService = new AuthService();
+  context.reportConfig = new ReportConfig();
+  context.reportEngine = new ReportEngine(context.reportConfig);
 
   // Window management
   context.windowManager = new WindowManager();
@@ -78,7 +84,7 @@ app.whenReady().then(async () => {
   // Browser engine requires the main window for BrowserView embedding
   context.browserEngine = new BrowserEngine(mainWindow);
   context.recorderEngine = new RecorderEngine(context.browserEngine, context.locatorEngine, context.flowEngine);
-  context.replayEngine = new ReplayEngine(context.browserEngine, context.locatorEngine);
+  context.replayEngine = new ReplayEngine(context.browserEngine, context.locatorEngine, context.reportConfig);
 
   // Register IPC handlers (renderer ↔ main bridge)
   registerIpcHandlers(context);

@@ -12,6 +12,13 @@
   const testCases = []; // in-memory store
   let editingIndex = -1;
 
+  /**
+   * Stores per-test-case execution results for report generation.
+   * Populated during runTestCase(), consumed by report-ui.js.
+   * Shape: { [testCaseIndex]: { results: [...], screenshots: {...}, startedAt, finishedAt } }
+   */
+  const executionStore = {};
+
   // ─── DOM refs ────────────────────────────────────────────────
   const listEl          = document.getElementById('testcase-list');
   const logOutputEl     = document.getElementById('replay-log-output');
@@ -184,12 +191,26 @@
     if (!tc) return;
     tc.status = 'running';
     tc.lastRun = Date.now();
+    const startedAt = Date.now();
     render();
     try {
       const result = await window.testflow.replay.runTestCase(tc);
       tc.status = result?.results?.every(r => r.status === 'passed') ? 'passed' : 'failed';
+      // Store execution data for report generation
+      executionStore[idx] = {
+        results: result?.results || [],
+        screenshots: result?.screenshots || {},
+        startedAt,
+        finishedAt: Date.now(),
+      };
     } catch (err) {
       tc.status = 'failed';
+      executionStore[idx] = {
+        results: [],
+        screenshots: {},
+        startedAt,
+        finishedAt: Date.now(),
+      };
       appendLog(`⚠ Error running test case: ${err.message || err}`, 'error');
     }
     tc.networkLog = window.NetworkPanel?.getRequests?.() || [];
@@ -393,5 +414,5 @@
   }
 
   // Expose for external use
-  window.TestCaseManager = { addTestCase, render, getState, loadState };
+  window.TestCaseManager = { addTestCase, render, getState, loadState, getExecutionStore: () => ({ ...executionStore }) };
 })();

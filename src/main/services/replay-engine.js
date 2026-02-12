@@ -8,15 +8,18 @@
 const EventEmitter = require('events');
 
 class ReplayEngine extends EventEmitter {
-  constructor(browserEngine, locatorEngine) {
+  constructor(browserEngine, locatorEngine, reportConfig) {
     super();
     this.browserEngine = browserEngine;
     this.locatorEngine = locatorEngine;
+    this.reportConfig  = reportConfig || null;
     this.state = 'idle'; // idle | playing | paused | stepping
     this.currentFlow = null;
     this.currentStepIndex = -1;
     this.results = [];
     this.abortController = null;
+    /** @type {Object<string, { buffer: Buffer, base64: string }>} */
+    this.screenshots = {};
   }
 
   /**
@@ -30,6 +33,7 @@ class ReplayEngine extends EventEmitter {
     this.currentFlow = flow;
     this.currentStepIndex = 0;
     this.results = [];
+    this.screenshots = {};
     this.state = 'playing';
     this.abortController = { aborted: false };
 
@@ -65,9 +69,10 @@ class ReplayEngine extends EventEmitter {
       flowId: flow.id,
       results: this.results,
       passed: this.results.every(r => r.status === 'passed'),
+      screenshots: this.screenshots,
     });
 
-    return { success: true, results: this.results };
+    return { success: true, results: this.results, screenshots: this.screenshots };
   }
 
   /**
@@ -136,8 +141,14 @@ class ReplayEngine extends EventEmitter {
 
       this.emit('step-started', { stepId: step.id, index: i, total: steps.length });
 
+      // Pre-step screenshot (if configured)
+      await this._captureScreenshot(step.id + '_before', 'beforeEachStep');
+
       const result = await this._executeStep(step);
       this.results.push(result);
+
+      // Post-step screenshot (if configured)
+      await this._captureScreenshot(step.id, 'afterEachStep');
 
       this.emit('step-complete', { ...result, index: i, total: steps.length });
 
@@ -148,6 +159,8 @@ class ReplayEngine extends EventEmitter {
       await this._sleep(300);
 
       if (result.status === 'failed') {
+        // Failure screenshot (always captured by default)
+        await this._captureScreenshot(step.id + '_failure', 'afterFailure');
         this.emit('step-failed', result);
         break; // Stop on failure
       }
@@ -1008,6 +1021,35 @@ class ReplayEngine extends EventEmitter {
       }
     } catch (e) { /* non-fatal */ }
     return false;
+  }
+
+  /**
+   * Capture a screenshot if the corresponding config flag is enabled.
+   * @param {string} screenshotId  – unique id for the screenshot
+   * @param {string} trigger       – config key: afterEachStep | afterFailure | beforeEachStep | afterEachTestCase
+   */
+  async _captureScreenshot(screenshotId, trigger) {
+    try {
+      const cfg = this.reportConfig?.get?.()?.screenshot;
+      if (!cfg) return;
+
+      const shouldCapture =
+        (trigger === 'afterEachStep'     && cfg.afterEachStep) ||
+        (trigger === 'afterFailure'      && cfg.afterFailure) ||
+        (trigger === 'beforeEachStep'    && cfg.beforeEachStep) ||
+        (trigger === 'afterEachTestCase' && cfg.afterEachTestCase);
+
+      if (!shouldCapture) return;
+
+      const buffer = await this.browserEngine.captureScreenshot();
+      this.screenshots[screenshotId] = {
+        buffer,
+        base64: buffer.toString('base64'),
+      };
+    } catch (err) {
+      // Screenshot failure must never stop replay
+      console.warn('[ReplayEngine] Screenshot capture failed:', err.message);
+    }
   }
 
   _sleep(ms) {

@@ -135,6 +135,16 @@ contextBridge.exposeInMainWorld('testflow', {
     setPreset: (preset) => ipcRenderer.invoke('workspace:setPreset', preset),
   },
 
+  // ─── Report ────────────────────────────────────────────────
+  report: {
+    getSettings:    ()          => ipcRenderer.invoke('report:getSettings'),
+    updateSettings: (partial)   => ipcRenderer.invoke('report:updateSettings', partial),
+    resetSettings:  ()          => ipcRenderer.invoke('report:resetSettings'),
+    generate:       (payload)   => ipcRenderer.invoke('report:generate', payload),
+    openFolder:     (folderPath)=> ipcRenderer.invoke('report:openFolder', folderPath),
+    openHtml:       (htmlPath)  => ipcRenderer.invoke('report:openHtml', htmlPath),
+  },
+
   // ─── Event Listeners (from main process / menu) ────────────
   on: (channel, callback) => {
     const validChannels = [
@@ -148,6 +158,7 @@ contextBridge.exposeInMainWorld('testflow', {
       'menu:export-selenium-python', 'menu:export-markdown', 'menu:export-json',
       'menu:toggle-console', 'menu:toggle-network',
       'menu:about', 'menu:shortcuts',
+      'menu:report-settings',
       'console:log', 'network:request', 'network:clear',
       'workspace:preset-changed',
     ];

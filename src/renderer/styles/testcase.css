@@ -58,6 +58,23 @@
   height: 12px;
 }
 
+.replay-log-btn-report {
+  background: var(--bg-surface);
+  color: var(--accent-blue, #89b4fa);
+  border-color: var(--accent-blue, #89b4fa);
+  font-weight: 600;
+}
+
+.replay-log-btn-report:hover {
+  background: var(--accent-blue, #89b4fa);
+  color: var(--bg-primary, #1e1e2e);
+}
+
+.replay-log-btn-report:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ─── Test Case List ─────────────────────────────── */
 .testcase-list {
   overflow-y: auto;

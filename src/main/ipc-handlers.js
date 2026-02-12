@@ -22,6 +22,8 @@ function registerIpcHandlers(context) {
     exportEngine,
     shareService,
     authService,
+    reportConfig,
+    reportEngine,
   } = context;
 
   // ─── Project Management ──────────────────────────────────────
@@ -483,6 +485,42 @@ function registerIpcHandlers(context) {
 
   ipcMain.handle('editor:close', async () => {
     windowManager.closeEditorWindow();
+    return true;
+  });
+
+  // ─── Report Config ─────────────────────────────────────────
+  ipcMain.handle('report:getSettings', async () => {
+    return reportConfig.get();
+  });
+
+  ipcMain.handle('report:updateSettings', async (event, partial) => {
+    return reportConfig.update(partial);
+  });
+
+  ipcMain.handle('report:resetSettings', async () => {
+    return reportConfig.reset();
+  });
+
+  // ─── Report Generation ────────────────────────────────────
+  ipcMain.handle('report:generate', async (event, payload) => {
+    try {
+      const result = await reportEngine.generate(payload);
+      return { success: true, ...result };
+    } catch (err) {
+      console.error('[ReportEngine] Generation failed:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('report:openFolder', async (event, folderPath) => {
+    const { shell } = require('electron');
+    shell.openPath(folderPath);
+    return true;
+  });
+
+  ipcMain.handle('report:openHtml', async (event, htmlPath) => {
+    const { shell } = require('electron');
+    shell.openExternal('file://' + htmlPath.replace(/\\\\/g, '/'));
     return true;
   });
 }

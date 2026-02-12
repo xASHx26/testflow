@@ -186,6 +186,11 @@ function buildAppMenu(context) {
           accelerator: 'CmdOrCtrl+K',
           click: () => windowManager.sendToRenderer('menu:shortcuts'),
         },
+        { type: 'separator' },
+        {
+          label: 'Report Settings',
+          click: () => windowManager.sendToRenderer('menu:report-settings'),
+        },
       ],
     },
   ];
