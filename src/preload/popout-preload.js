@@ -7,6 +7,9 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Track received events for debugging
+const _receivedEvents = [];
+
 contextBridge.exposeInMainWorld('popoutApi', {
   dock: () => ipcRenderer.invoke('popout:dock'),
   getPanel: () => ipcRenderer.invoke('popout:getPanel'),
@@ -20,7 +23,16 @@ contextBridge.exposeInMainWorld('popoutApi', {
       'replay:started', 'replay:finished', 'replay:error',
     ];
     if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, (_, ...args) => callback(...args));
+      ipcRenderer.on(channel, (_, ...args) => {
+        _receivedEvents.push({ channel, time: Date.now() });
+        callback(...args);
+      });
     }
   },
+
+  // Debug: get list of received events
+  getReceivedEvents: () => [..._receivedEvents],
+
+  // Debug: request a test event from main
+  requestTestEvent: () => ipcRenderer.invoke('popout:testEvent'),
 });

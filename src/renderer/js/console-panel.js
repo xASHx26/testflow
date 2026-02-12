@@ -16,11 +16,11 @@ class ConsolePanel {
   }
 
   _listen() {
-    // From toolbar / other modules
+    // From toolbar / other modules (in-renderer EventBus)
     window.EventBus.on('console:log', (data) => this._addEntry(data));
 
-    // From BrowserView console intercept
-    window.testflow.on('console:message', (data) => this._addEntry(data));
+    // From main process IPC (BrowserView console-message, browser-preload inject)
+    window.testflow.on('console:log', (data) => this._addEntry(data));
   }
 
   _bindClear() {

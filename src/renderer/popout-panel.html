@@ -181,6 +181,7 @@
   <div class="popout-titlebar">
     <span class="popout-title" id="popout-title">Panel</span>
     <div class="popout-actions">
+      <button class="popout-btn" id="btn-test" title="Send test event">🧪 Test</button>
       <button class="popout-btn popout-btn-dock" id="btn-dock" title="Dock back into main window">⬅ Dock</button>
     </div>
   </div>
@@ -197,12 +198,11 @@
       browser:      'Browser View',
       flows:        'Test Flows',
       inspector:    'Element Inspector',
-      testdata:     'Test Data',
       console:      'Console',
       network:      'Network',
       'replay-log': 'Replay Log',
       'bottom-all': 'Console · Network · Replay Log',
-      'right-all':  'Inspector · Test Data',
+      'right-all':  'Element Inspector',
     };
 
     titleEl.textContent = titles[panelType] || 'Panel';
@@ -221,17 +221,11 @@
         return;
       }
 
-      /* ── Flows / Test Data (no live stream) ──────────── */
+      /* ── Flows (no live stream) ──────────────────── */
       if (panelType === 'flows') {
         contentEl.innerHTML = `<div class="po-empty"><div><div class="ei">📂</div>
           <div>Test Flows panel detached</div>
           <div class="eh">Flows and steps are managed in the main IDE.<br>Click <strong>Dock</strong> to return.</div></div></div>`;
-        return;
-      }
-      if (panelType === 'testdata') {
-        contentEl.innerHTML = `<div class="po-empty"><div><div class="ei">📊</div>
-          <div>Test Data panel detached</div>
-          <div class="eh">Test data is managed in the main IDE.<br>Click <strong>Dock</strong> to return.</div></div></div>`;
         return;
       }
 
@@ -269,21 +263,10 @@
         return;
       }
 
-      /* ── Right-All (Inspector + Test Data) ───────────── */
+      /* ── Right-All (Inspector) ─────────────────── */
       if (panelType === 'right-all') {
-        contentEl.innerHTML = `
-          <div class="popout-tabs">
-            <button class="popout-tab active" data-pane="rinsp">Inspector</button>
-            <button class="popout-tab" data-pane="rtd">Test Data</button>
-          </div>
-          <div class="popout-pane active" id="pane-rinsp">
-            <div class="po-inspector" id="live-inspector">
-              <div class="po-empty" id="inspector-empty"><div><div class="ei">🔍</div><div>Enable the Inspector and hover over elements…</div></div></div></div>
-          </div>
-          <div class="popout-pane" id="pane-rtd">
-            <div class="po-empty"><div><div class="ei">📊</div><div>Test data is managed in the main IDE.</div></div></div>
-          </div>`;
-        setupTabs();
+        contentEl.innerHTML = `<div class="po-inspector" id="live-inspector">
+          <div class="po-empty" id="inspector-empty"><div><div class="ei">🔍</div><div>Enable the Inspector and hover over elements…</div></div></div></div>`;
         setupInspectorListener();
         return;
       }
@@ -512,9 +495,40 @@
     function fmtSize(b) { if (!b && b !== 0) return ''; if (b < 1024) return b + 'B'; if (b < 1048576) return (b/1024).toFixed(1) + 'KB'; return (b/1048576).toFixed(1) + 'MB'; }
 
     /* ── Init ──────────────────────────────────────────── */
+    // Debug: log all incoming events to verify forwarding works
+    const _debugChannels = [
+      'console:log', 'network:request', 'network:clear',
+      'inspector:element-hovered', 'inspector:element-selected',
+      'replay:step-started', 'replay:step-completed',
+      'replay:started', 'replay:finished', 'replay:error',
+    ];
+    _debugChannels.forEach(ch => {
+      window.popoutApi.on(ch, (data) => {
+        console.log(`[popout-debug] Received ${ch}:`, data);
+        // Also show a visible marker
+        document.title = `TestFlow — GOT: ${ch}`;
+      });
+    });
+
     buildContent();
+
     document.getElementById('btn-dock').addEventListener('click', () => {
       if (window.popoutApi) window.popoutApi.dock();
+    });
+
+    // Debug: test button sends a test event from main process back to this window
+    document.getElementById('btn-test').addEventListener('click', async () => {
+      document.title = 'TestFlow — Requesting test event...';
+      try {
+        await window.popoutApi.requestTestEvent();
+        // If the test event arrives, the debug listener above will update the title
+        setTimeout(() => {
+          const events = window.popoutApi.getReceivedEvents();
+          document.title = `TestFlow — Events received: ${events.length}`;
+        }, 500);
+      } catch (err) {
+        document.title = `TestFlow — ERROR: ${err.message}`;
+      }
     });
   </script>
 </body>

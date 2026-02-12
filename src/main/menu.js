@@ -194,10 +194,6 @@ function buildAppMenu(context) {
               label: 'Pop Out Inspector',
               click: () => windowManager.sendToRenderer('menu:popout-panel', 'inspector'),
             },
-            {
-              label: 'Pop Out Test Data',
-              click: () => windowManager.sendToRenderer('menu:popout-panel', 'testdata'),
-            },
             { type: 'separator' },
             {
               label: 'Pop Out Console',

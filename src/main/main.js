@@ -44,6 +44,14 @@ const context = {
 
 // ─── App Lifecycle ───────────────────────────────────────────────
 app.whenReady().then(async () => {
+  // ─── Startup Privacy: clear stale browser data from previous session ───
+  // Handles cases where the app crashed or was force-closed without cleanup.
+  try {
+    await clearBrowserData();
+  } catch (e) {
+    console.error('[TestFlow] Startup cleanup error:', e);
+  }
+
   // Content Security Policy — only for the IDE renderer, not for the embedded BrowserView.
   // We store the renderer's webContents id after the window is created and filter on it.
 
@@ -99,6 +107,50 @@ app.whenReady().then(async () => {
     mainWindow.show();
     mainWindow.focus();
   });
+});
+
+// ─── Browser Privacy: Clear all website data on quit ────────────────────────
+// The embedded browser uses partition 'persist:testflow-browser'.
+// On quit we wipe cookies, cache, localStorage, indexedDB, service workers, etc.
+// IDE settings & bookmarks live in the default session and are untouched.
+const BROWSER_PARTITION = 'persist:testflow-browser';
+
+function clearBrowserData() {
+  try {
+    const browserSession = session.fromPartition(BROWSER_PARTITION);
+    return browserSession.clearStorageData({
+      storages: [
+        'cookies',
+        'filesystem',
+        'indexdb',
+        'localstorage',
+        'shadercache',
+        'websql',
+        'serviceworkers',
+        'cachestorage',
+      ],
+    }).then(() => {
+      return browserSession.clearCache();
+    }).then(() => {
+      return browserSession.clearAuthCache();
+    }).then(() => {
+      console.log('[TestFlow] Browser data cleared successfully');
+    });
+  } catch (err) {
+    console.error('[TestFlow] Failed to clear browser data:', err);
+  }
+}
+
+app.on('before-quit', async (event) => {
+  event.preventDefault();
+  try {
+    await clearBrowserData();
+  } catch (e) {
+    console.error('[TestFlow] Cleanup error on quit:', e);
+  }
+  // Remove this handler to avoid infinite loop, then quit
+  app.removeAllListeners('before-quit');
+  app.quit();
 });
 
 app.on('window-all-closed', () => {

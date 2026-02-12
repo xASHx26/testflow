@@ -448,8 +448,14 @@ function registerIpcHandlers(context) {
   });
 
   // ─── Console Logs ────────────────────────────────────────────
+  // From browser-preload inject scripts
   ipcMain.on('console:log', (event, data) => {
     windowManager.sendToRenderer('console:log', data);
+  });
+
+  // From BrowserView native console-message event (DevTools protocol)
+  browserEngine.on('console-message', (entry) => {
+    windowManager.sendToRenderer('console:log', entry);
   });
 
   // ─── Network Logs ────────────────────────────────────────────
@@ -622,6 +628,17 @@ function registerIpcHandlers(context) {
 
   ipcMain.handle('popout:getPanel', async () => {
     return windowManager.getActivePopouts();
+  });
+
+  // Debug: send a test event to the popout that requested it
+  ipcMain.handle('popout:testEvent', async (event) => {
+    // Send a test console:log event directly to the sender
+    event.sender.send('console:log', {
+      level: 'info',
+      message: '🧪 Test event from main process — popout IPC is working!',
+      timestamp: Date.now(),
+    });
+    return true;
   });
 }
 

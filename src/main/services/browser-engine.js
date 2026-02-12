@@ -5,10 +5,13 @@
  * Provides navigation, script injection, DOM inspection, and screenshot capture.
  */
 
-const { BrowserView } = require('electron');
+const { BrowserView, session } = require('electron');
 const path = require('path');
 const EventEmitter = require('events');
 const { ipcMain } = require('electron');
+
+// Isolated session partition for the embedded browser — cleared on quit
+const BROWSER_PARTITION = 'persist:testflow-browser';
 
 class BrowserEngine extends EventEmitter {
   constructor(mainWindow) {
@@ -39,6 +42,7 @@ class BrowserEngine extends EventEmitter {
         sandbox: false,
         javascript: true,
         webSecurity: true,
+        partition: BROWSER_PARTITION,
       },
     });
 

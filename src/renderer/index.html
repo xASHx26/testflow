@@ -226,23 +226,18 @@
     <!-- Resize handle: browser ↔ right -->
     <div class="resize-handle resize-handle-v" data-resize="right"></div>
 
-    <!-- Right Sidebar: Inspector + Test Data (hidden by default) -->
+    <!-- Right Sidebar: Inspector (hidden by default) -->
     <aside id="panel-right" class="panel panel-right hidden">
       <div class="panel-tabs">
         <button class="panel-tab active" data-tab="inspector">Inspector</button>
-        <button class="panel-tab" data-tab="testdata">Test Data</button>
         <div class="panel-tab-spacer"></div>
         <button id="btn-toggle-right" class="panel-btn" title="Collapse Panel">▶</button>
       </div>
 
-      <!-- Inspector Tab (elements + locators combined) -->
+      <!-- Inspector Tab (elements + locators + test data combined) -->
       <div id="tab-inspector" class="tab-content active">
         <div id="inspector-content" class="inspector-content"></div>
         <div id="locator-list" class="locator-list"></div>
-      </div>
-
-      <!-- Test Data Tab -->
-      <div id="tab-testdata" class="tab-content">
         <div id="testdata-content" class="testdata-content"></div>
       </div>
     </aside>

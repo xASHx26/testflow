@@ -83,7 +83,6 @@ class Workspace {
       browser:      'browser',
       flows:        'left',
       inspector:    'right',
-      testdata:     'right',
       console:      'bottom',
       network:      'bottom',
       'replay-log': 'bottom',
@@ -101,12 +100,11 @@ class Workspace {
       browser:      'Browser',
       flows:        'Test Flows',
       inspector:    'Inspector',
-      testdata:     'Test Data',
       console:      'Console',
       network:      'Network',
       'replay-log': 'Replay Log',
       'bottom-all': 'Console + Network + Replay Log',
-      'right-all':  'Inspector + Test Data',
+      'right-all':  'Inspector',
     };
     return labels[panelType] || panelType;
   }

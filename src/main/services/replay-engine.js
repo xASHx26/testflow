@@ -222,6 +222,30 @@ class ReplayEngine extends EventEmitter {
         }
       }
 
+      // Recovery for select/dropdown: if the target element is inside a
+      // datepicker popup that isn't open yet, open it and retry.
+      if (!locatorResult.found && (step.type === 'select' || step.action === 'select')) {
+        const isDatepicker = (step.locators || []).some(l => {
+          const v = l.value || '';
+          return typeof v === 'string' && v.toLowerCase().includes('datepicker');
+        });
+        if (isDatepicker) {
+          await this.browserEngine.executeScript(`
+            (() => {
+              const dpInput = document.querySelector('.react-datepicker-wrapper input') ||
+                              document.querySelector('input[id*="date" i]') ||
+                              document.querySelector('input[id*="Date" i]');
+              if (dpInput) dpInput.click();
+            })()
+          `);
+          await this._sleep(800);
+          locatorResult = await this._findElement(step.locators, step.wait);
+          diagnostics.locatorUsed = locatorResult.locator;
+          diagnostics.locatorsFailed = locatorResult.failed;
+          diagnostics.fallbackUsed = true;
+        }
+      }
+
       if (!locatorResult.found) {
         diagnostics.duration = Date.now() - startTime;
         return this._buildResult(step, 'failed', diagnostics, 'Element not found with any locator');
@@ -437,38 +461,10 @@ class ReplayEngine extends EventEmitter {
           await this._sleep(400);
           await this._visualCleanup();
         } else if (rsClickType === 'option') {
-          // React-select option click — use the numeric index from test data
-          // to select the Nth option (1-based), so editing the number in the
-          // test data table changes which option gets selected.
-          const rawIdx = step.value != null ? Number(step.value) : NaN;
-          const optionIdx = Number.isFinite(rawIdx) && rawIdx >= 1 ? rawIdx : 0;
-          if (optionIdx >= 1) {
-            // Extract the react-select instance number from the element's ID
-            const selectNum = await this.browserEngine.executeScript(`
-              (() => {
-                const el = ${locatorJs};
-                if (!el) return null;
-                const m = (el.id || '').match(/^react-select-(\\d+)-option/);
-                return m ? m[1] : null;
-              })()
-            `);
-            if (selectNum) {
-              const targetId = 'react-select-' + selectNum + '-option-' + (optionIdx - 1);
-              const targetJs = `document.getElementById('${targetId}')`;
-              const exists = await this.browserEngine.executeScript(`!!${targetJs}`);
-              if (exists) {
-                await this._visualClick(targetJs, `select option #${optionIdx}`);
-              } else {
-                // Fallback to recorded locator
-                await this._visualClick(locatorJs, 'click');
-              }
-            } else {
-              await this._visualClick(locatorJs, 'click');
-            }
-          } else {
-            // No valid index — use recorded locator
-            await this._visualClick(locatorJs, 'click');
-          }
+          // React-select option — just click it directly using the recorded
+          // locator. The dropdown should already be open from the prior
+          // container click step.
+          await this._visualClick(locatorJs, 'click');
         } else {
           // Normal click (including react-select options which need click to select)
           await this._visualClick(locatorJs, 'click');
@@ -485,7 +481,20 @@ class ReplayEngine extends EventEmitter {
           await this.browserEngine.executeScript(`
             (() => {
               const el = ${locatorJs};
-              if (el && el.checked !== ${cbVal}) el.click();
+              if (!el) return;
+              if (el.checked === ${cbVal}) return; // Already in desired state
+              // If the input is hidden (e.g. custom-control-input), click
+              // its associated <label> instead so the browser registers it.
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              const isHidden = rect.width === 0 || rect.height === 0 ||
+                               style.opacity === '0' || style.visibility === 'hidden' ||
+                               style.display === 'none' || style.position === 'absolute';
+              if (isHidden && el.id) {
+                const label = document.querySelector('label[for="' + el.id + '"]');
+                if (label) { label.click(); return; }
+              }
+              el.click();
             })()
           `);
           await this._visualClickRipple();
@@ -502,8 +511,29 @@ class ReplayEngine extends EventEmitter {
         if (radioName && radioVal != null) {
           const eName = String(radioName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           const eVal  = String(radioVal).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          // Find the radio input, then click its label if the input is hidden
           const radioLocator = `(document.querySelector('input[type="radio"][name="${eName}"][value="${eVal}"]') || ${locatorJs})`;
-          await this._visualClick(radioLocator, `select: ${radioVal}`);
+          await this._visualMoveAndHighlight(radioLocator, `select: ${radioVal}`);
+          await this._visualClickRipple();
+          await this.browserEngine.executeScript(`
+            (() => {
+              const el = ${radioLocator};
+              if (!el) return;
+              // If the radio input is hidden, click the associated label
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              const isHidden = rect.width === 0 || rect.height === 0 ||
+                               style.opacity === '0' || style.visibility === 'hidden' ||
+                               style.display === 'none' || style.position === 'absolute';
+              if (isHidden && el.id) {
+                const label = document.querySelector('label[for="' + el.id + '"]');
+                if (label) { label.click(); return; }
+              }
+              el.click();
+            })()
+          `);
+          await this._sleep(120);
+          await this._visualCleanup();
         } else {
           await this._visualClick(locatorJs, 'radio');
         }
@@ -530,32 +560,11 @@ class ReplayEngine extends EventEmitter {
         const value = Object.values(step.testData || {})[0] || '';
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-        // If the select element is inside a datepicker popup that may be closed,
-        // try to open it by clicking the associated date input first.
-        const elExists = await this.browserEngine.executeScript(`!!${locatorJs}`);
-        if (!elExists) {
-          // Look for datepicker-related classes in any locator
-          const isDatepicker = (step.locators || step.element?.classes || []).some(l => {
-            const v = l.value || l;
-            return typeof v === 'string' && v.includes('datepicker');
-          });
-          if (isDatepicker || (step.element?.classes || []).some(c => c.includes('datepicker'))) {
-            // Try clicking the dateOfBirth input or any react-datepicker input to open the popup
-            await this.browserEngine.executeScript(`
-              (() => {
-                const dpInput = document.querySelector('.react-datepicker-wrapper input') ||
-                                document.querySelector('input[id*="date" i]') ||
-                                document.querySelector('input[id*="Date" i]');
-                if (dpInput) dpInput.click();
-              })()
-            `);
-            await this._sleep(500); // Wait for datepicker popup to render
-          }
-        }
-
         await this._visualMoveAndHighlight(locatorJs, `select: "${value}"`);
         await this._visualClickRipple();
-        // Perform the actual selection with value-attribute → display-text fallback
+        // Perform the actual selection with value-attribute → display-text fallback.
+        // Use the native value setter + React's change handler to ensure
+        // React-controlled <select> elements (e.g. datepicker month/year) update.
         const selectOk = await this.browserEngine.executeScript(`
           (() => {
             const el = ${locatorJs};
@@ -575,6 +584,11 @@ class ReplayEngine extends EventEmitter {
                 if (byText) el.value = byText.value;
                 else el.value = '${escaped}';
               }
+              // Use native setter to trigger React's synthetic onChange
+              const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLSelectElement.prototype, 'value')?.set;
+              if (nativeSetter) nativeSetter.call(el, el.value);
+              el.dispatchEvent(new Event('input', { bubbles: true }));
               el.dispatchEvent(new Event('change', { bubbles: true }));
               return el.value !== prev ? 'ok' : (el.value === '${escaped}' ? 'ok' : 'no-change');
             } else {
@@ -586,7 +600,7 @@ class ReplayEngine extends EventEmitter {
         `);
         if (selectOk === 'not-found') throw new Error('Select element not found during action');
         if (selectOk === 'no-change') throw new Error(`Failed to select "${value}" — no matching option`);
-        await this._sleep(350);
+        await this._sleep(500);
         await this._visualCleanup();
         break;
       }
@@ -1079,6 +1093,7 @@ class ReplayEngine extends EventEmitter {
           id: `tc-step-${i}`,
           type: tc.action,
           action: tc.action,
+          description: tc.description || '',
           locators: tc.allLocators || (tc.locator ? [tc.locator] : []),
           wait: tc.waitCondition || null,
           enabled: true,

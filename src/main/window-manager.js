@@ -91,6 +91,7 @@ class WindowManager {
         nodeIntegration: false,
         sandbox: false,
         javascript: true,
+        partition: 'persist:testflow-browser',
       },
     });
 
@@ -494,7 +495,7 @@ class WindowManager {
 
   /**
    * Open a panel in its own separate window (for multi-monitor use).
-   * Supported panels: browser, flows, inspector, testdata, console, network,
+   * Supported panels: browser, flows, inspector, console, network,
    *                   replay-log, bottom-all, right-all
    */
   openPopoutWindow(panelType) {
@@ -508,7 +509,6 @@ class WindowManager {
       browser:      { width: 1024, height: 768 },
       flows:        { width: 340,  height: 600 },
       inspector:    { width: 420,  height: 600 },
-      testdata:     { width: 420,  height: 500 },
       console:      { width: 800,  height: 400 },
       network:      { width: 900,  height: 450 },
       'replay-log': { width: 900,  height: 500 },
@@ -698,10 +698,19 @@ class WindowManager {
     const targets = channelToPopouts[channel];
     if (!targets) return;
 
+    const activeKeys = Object.keys(this.popoutWindows).filter(
+      k => this.popoutWindows[k] && !this.popoutWindows[k].isDestroyed()
+    );
+
     for (const pType of targets) {
       const win = this.popoutWindows[pType];
       if (win && !win.isDestroyed()) {
-        win.webContents.send(channel, ...args);
+        try {
+          win.webContents.send(channel, ...args);
+          console.log(`[popout-fwd] ✅ Sent ${channel} → ${pType}`);
+        } catch (err) {
+          console.error(`[popout-fwd] ❌ Failed ${channel} → ${pType}:`, err.message);
+        }
       }
     }
   }
