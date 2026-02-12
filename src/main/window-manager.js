@@ -14,6 +14,8 @@ class WindowManager {
     this.browserView = null;
     this.miniInspectorWindow = null;
     this.reportSettingsWindow = null;
+    this.reportResultWindow = null;
+    this._reportResultPayload = null;
     this._browserViewHidden = false;
     this._savedBrowserBounds = null;
   }
@@ -315,6 +317,70 @@ class WindowManager {
       this.reportSettingsWindow.close();
     }
     this.reportSettingsWindow = null;
+  }
+
+  // ─── Report Result Window (modal BrowserWindow) ────────
+  /**
+   * Open a modal window showing report generation result.
+   * @param {Object} payload  { success, reportDir, indexPath, error }
+   */
+  openReportResultWindow(payload) {
+    if (this.reportResultWindow && !this.reportResultWindow.isDestroyed()) {
+      this.reportResultWindow.focus();
+      return;
+    }
+
+    this._reportResultPayload = payload;
+
+    this.reportResultWindow = new BrowserWindow({
+      width: 440,
+      height: 310,
+      minWidth: 360,
+      minHeight: 260,
+      parent: this.mainWindow,
+      modal: true,
+      show: false,
+      frame: false,
+      resizable: false,
+      backgroundColor: '#1e1e2e',
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'report-result-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    this.reportResultWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'report-result.html')
+    );
+
+    this.reportResultWindow.once('ready-to-show', () => {
+      this.reportResultWindow.show();
+    });
+
+    this.reportResultWindow.on('closed', () => {
+      this.reportResultWindow = null;
+      this._reportResultPayload = null;
+    });
+  }
+
+  /**
+   * Returns the payload stored for the report result window.
+   */
+  getReportResultPayload() {
+    return this._reportResultPayload || null;
+  }
+
+  /**
+   * Close the report result window if open.
+   */
+  closeReportResultWindow() {
+    if (this.reportResultWindow && !this.reportResultWindow.isDestroyed()) {
+      this.reportResultWindow.close();
+    }
+    this.reportResultWindow = null;
+    this._reportResultPayload = null;
   }
 
   /**

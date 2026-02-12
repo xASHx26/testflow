@@ -525,6 +525,33 @@ function registerIpcHandlers(context) {
     return true;
   });
 
+  // ─── Report Result Window IPC ──────────────────────────────
+  ipcMain.handle('report-result:get-data', async () => {
+    return windowManager.getReportResultPayload();
+  });
+
+  ipcMain.handle('report-result:open-report', async (event, htmlPath) => {
+    const { shell } = require('electron');
+    shell.openExternal('file://' + htmlPath.replace(/\\/g, '/'));
+    return true;
+  });
+
+  ipcMain.handle('report-result:open-folder', async (event, folderPath) => {
+    const { shell } = require('electron');
+    shell.openPath(folderPath);
+    return true;
+  });
+
+  ipcMain.handle('report-result:close', async () => {
+    windowManager.closeReportResultWindow();
+    return true;
+  });
+
+  ipcMain.handle('report:showResult', async (event, resultPayload) => {
+    windowManager.openReportResultWindow(resultPayload);
+    return true;
+  });
+
   // ─── Report Generation ────────────────────────────────────
   ipcMain.handle('report:generate', async (event, payload) => {
     try {

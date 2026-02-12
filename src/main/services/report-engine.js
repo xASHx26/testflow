@@ -167,7 +167,13 @@ class ReportEngine {
   }
 
   _deriveStatus(tc, stepResults) {
+    // Trust the IDE status when it was explicitly set by a run
+    if (tc.status === 'passed' || tc.status === 'failed') {
+      return tc.status;
+    }
+    // Test case was never executed
     if (!stepResults || stepResults.length === 0) return 'skipped';
+    // Derive from step-level results
     if (stepResults.every(r => r.status === 'passed')) return 'passed';
     return 'failed';
   }

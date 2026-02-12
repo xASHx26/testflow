@@ -110,30 +110,12 @@
       const result = await window.testflow.report.generate(payload);
       hideOverlay();
 
-      if (result.success) {
-        const choice = await window.Modal?.custom?.(
-          'Report Generated',
-          `<div style="font-size:0.9rem;line-height:1.7;">
-            <p>✅ Report saved successfully!</p>
-            <p style="color:var(--overlay1);font-size:0.82rem;margin-top:8px;word-break:break-all;">
-              📁 ${escHtml(result.reportDir)}
-            </p>
-          </div>`,
-          [
-            { label: 'Close', className: 'btn-secondary', value: 'close' },
-            { label: 'Open Folder', className: 'btn-secondary', value: 'folder' },
-            { label: 'Open Report', className: 'btn-primary', value: 'open' },
-          ],
-        );
-        if (choice === 'open')   window.testflow.report.openHtml(result.indexPath);
-        if (choice === 'folder') window.testflow.report.openFolder(result.reportDir);
-      } else {
-        window.Modal?.info?.('Report Failed', result.error || 'An unknown error occurred.');
-      }
+      // Open result in a separate modal window
+      window.testflow.report.showResult(result);
     } catch (err) {
       hideOverlay();
       console.error('[ReportUI] Report generation error:', err);
-      window.Modal?.info?.('Report Error', err.message || 'Unexpected error generating report.');
+      window.testflow.report.showResult({ success: false, error: err.message || 'Unexpected error generating report.' });
     } finally {
       generating = false;
       btnGenReport.disabled = false;
@@ -148,12 +130,5 @@
   window.testflow?.on?.('menu:report-settings', () => {
     window.testflow.report.openSettingsWindow();
   });
-
-  // ─── Helpers ────────────────────────────────────────────────
-  function escHtml(str) {
-    const d = document.createElement('div');
-    d.textContent = str || '';
-    return d.innerHTML;
-  }
 
 })();

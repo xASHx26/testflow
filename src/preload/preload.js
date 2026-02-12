@@ -141,6 +141,7 @@ contextBridge.exposeInMainWorld('testflow', {
     updateSettings:     (partial)   => ipcRenderer.invoke('report:updateSettings', partial),
     resetSettings:      ()          => ipcRenderer.invoke('report:resetSettings'),
     openSettingsWindow: ()          => ipcRenderer.invoke('report:openSettingsWindow'),
+    showResult:         (result)    => ipcRenderer.invoke('report:showResult', result),
     generate:           (payload)   => ipcRenderer.invoke('report:generate', payload),
     openFolder:         (folderPath)=> ipcRenderer.invoke('report:openFolder', folderPath),
     openHtml:           (htmlPath)  => ipcRenderer.invoke('report:openHtml', htmlPath),
