@@ -26,9 +26,17 @@
       return;
     }
 
+    // Must have at least one test that was actually run (passed or failed)
     const executed = testCases.filter(tc => tc.status === 'passed' || tc.status === 'failed');
     if (executed.length === 0) {
       window.Modal?.info?.('No Results', 'Run your test cases first so there are results to report.');
+      return;
+    }
+
+    // Double-check: executionStore must have at least one entry
+    const execStore = window.TestCaseManager?.getExecutionStore?.() || {};
+    if (Object.keys(execStore).length === 0) {
+      window.Modal?.info?.('No Execution Data', 'Run your test cases first. No execution data has been recorded yet.');
       return;
     }
 
@@ -40,8 +48,6 @@
     await window.testflow.report.openProgressWindow();
 
     try {
-      const execStore = window.TestCaseManager?.getExecutionStore?.() || {};
-
       const results = testCases.map((_, idx) => {
         const exec = execStore[idx];
         return exec?.results || [];

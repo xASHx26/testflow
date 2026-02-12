@@ -321,43 +321,46 @@ class WindowManager {
   // ─── Report Progress Window (modal BrowserWindow) ─────────
   /**
    * Open a modal progress window for report generation.
-   * Shows progress bar, then transitions to result view.
+   * Returns a Promise that resolves when the window is fully loaded.
    */
   openReportProgressWindow() {
     if (this.reportProgressWindow && !this.reportProgressWindow.isDestroyed()) {
       this.reportProgressWindow.focus();
-      return;
+      return Promise.resolve();
     }
 
-    this.reportProgressWindow = new BrowserWindow({
-      width: 440,
-      height: 280,
-      minWidth: 360,
-      minHeight: 240,
-      parent: this.mainWindow,
-      modal: true,
-      show: false,
-      frame: false,
-      resizable: false,
-      backgroundColor: '#1e1e2e',
-      webPreferences: {
-        preload: path.join(__dirname, '..', 'preload', 'report-progress-preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false,
-      },
-    });
+    return new Promise((resolve) => {
+      this.reportProgressWindow = new BrowserWindow({
+        width: 440,
+        height: 280,
+        minWidth: 360,
+        minHeight: 240,
+        parent: this.mainWindow,
+        modal: true,
+        show: false,
+        frame: false,
+        resizable: false,
+        backgroundColor: '#1e1e2e',
+        webPreferences: {
+          preload: path.join(__dirname, '..', 'preload', 'report-progress-preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: false,
+        },
+      });
 
-    this.reportProgressWindow.loadFile(
-      path.join(__dirname, '..', 'renderer', 'report-progress.html')
-    );
+      this.reportProgressWindow.loadFile(
+        path.join(__dirname, '..', 'renderer', 'report-progress.html')
+      );
 
-    this.reportProgressWindow.once('ready-to-show', () => {
-      this.reportProgressWindow.show();
-    });
+      this.reportProgressWindow.webContents.once('did-finish-load', () => {
+        this.reportProgressWindow.show();
+        resolve();
+      });
 
-    this.reportProgressWindow.on('closed', () => {
-      this.reportProgressWindow = null;
+      this.reportProgressWindow.on('closed', () => {
+        this.reportProgressWindow = null;
+      });
     });
   }
 

@@ -527,7 +527,7 @@ function registerIpcHandlers(context) {
 
   // ─── Report Progress Window IPC ────────────────────────────
   ipcMain.handle('report:openProgressWindow', async () => {
-    windowManager.openReportProgressWindow();
+    await windowManager.openReportProgressWindow();
     return true;
   });
 
