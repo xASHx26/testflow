@@ -126,6 +126,41 @@ function buildAppMenu(context) {
           label: 'Review Mode',
           click: () => windowManager.sendToRenderer('menu:workspace-preset', 'review'),
         },
+        { type: 'separator' },
+        {
+          label: 'Browser Only',
+          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-only'),
+        },
+        {
+          label: 'Browser + Inspector',
+          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-inspector'),
+        },
+        {
+          label: 'Browser + Flows',
+          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'browser-flows'),
+        },
+        {
+          label: 'Compact',
+          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'compact'),
+        },
+        {
+          label: 'Full IDE',
+          click: () => windowManager.sendToRenderer('menu:workspace-preset', 'full'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Pop Out Browser',
+          accelerator: 'CmdOrCtrl+Shift+B',
+          click: () => windowManager.sendToRenderer('menu:popout-panel', 'browser'),
+        },
+        {
+          label: 'Pop Out Inspector',
+          click: () => windowManager.sendToRenderer('menu:popout-panel', 'inspector'),
+        },
+        {
+          label: 'Pop Out Console',
+          click: () => windowManager.sendToRenderer('menu:popout-panel', 'console'),
+        },
       ],
     },
     {
@@ -175,11 +210,11 @@ function buildAppMenu(context) {
       ],
     },
     {
-      label: 'Help',
+      label: 'Options',
       submenu: [
         {
-          label: 'About TestFlow',
-          click: () => windowManager.openAboutWindow(),
+          label: 'Report Settings',
+          click: () => windowManager.openReportSettingsWindow(),
         },
         {
           label: 'Keyboard Shortcuts',
@@ -188,8 +223,8 @@ function buildAppMenu(context) {
         },
         { type: 'separator' },
         {
-          label: 'Report Settings',
-          click: () => windowManager.openReportSettingsWindow(),
+          label: 'About TestFlow',
+          click: () => windowManager.openAboutWindow(),
         },
       ],
     },

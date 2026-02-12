@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TestFlow — Panel</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <link rel="stylesheet" href="styles/icons.css">
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/panels.css">
+  <link rel="stylesheet" href="styles/inspector.css">
+  <link rel="stylesheet" href="styles/testcase.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-base);
+      color: var(--text-primary);
+    }
+
+    /* ─── Popout Title Bar ─────────────────────────────── */
+    .popout-titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 34px;
+      padding: 0 12px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .popout-titlebar .popout-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .popout-titlebar .popout-actions {
+      display: flex;
+      gap: 6px;
+      -webkit-app-region: no-drag;
+    }
+
+    .popout-btn {
+      background: none;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .popout-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    .popout-btn-dock {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .popout-btn-dock:hover {
+      background: rgba(137, 180, 250, 0.12);
+    }
+
+    /* ─── Panel Content ────────────────────────────────── */
+    .popout-content {
+      height: calc(100% - 34px);
+      overflow: auto;
+    }
+
+    /* When hosting the browser view, the content is the BrowserView itself */
+    .popout-content.browser-host {
+      background: #fff;
+    }
+
+    /* Inspector panel in pop-out */
+    .popout-content .inspector-content,
+    .popout-content .locator-list,
+    .popout-content .testdata-content {
+      padding: 8px;
+    }
+
+    /* Console/Network panel in pop-out */
+    .popout-content .console-output,
+    .popout-content .network-output,
+    .popout-content .replay-log-output {
+      height: 100%;
+      overflow: auto;
+    }
+
+    /* Tab bar within pop-out */
+    .popout-tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 8px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .popout-tab {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .popout-tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .popout-tab.active {
+      color: var(--accent-blue);
+      background: rgba(137, 180, 250, 0.1);
+    }
+
+    .popout-pane {
+      display: none;
+      height: calc(100% - 36px);
+      overflow: auto;
+    }
+
+    .popout-pane.active {
+      display: block;
+    }
+
+    /* Status message */
+    .popout-status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .popout-status .status-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .popout-status-inner {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="popout-titlebar">
+    <span class="popout-title" id="popout-title">Panel</span>
+    <div class="popout-actions">
+      <button class="popout-btn popout-btn-dock" id="btn-dock" title="Dock back into main window">⬅ Dock</button>
+    </div>
+  </div>
+  <div class="popout-content" id="popout-content">
+    <div class="popout-status">
+      <div class="popout-status-inner">
+        <div class="status-icon">📌</div>
+        <div>Panel detached — content mirrors main window</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Panel type is passed via query param
+    const params = new URLSearchParams(window.location.search);
+    const panelType = params.get('panel') || 'unknown';
+    const titleEl = document.getElementById('popout-title');
+    const contentEl = document.getElementById('popout-content');
+
+    const titles = {
+      browser:   'Browser View',
+      inspector: 'Element Inspector',
+      console:   'Console & Logs',
+    };
+
+    titleEl.textContent = titles[panelType] || 'Panel';
+    document.title = `TestFlow — ${titles[panelType] || 'Panel'}`;
+
+    // Build appropriate content depending on panel type
+    if (panelType === 'browser') {
+      contentEl.classList.add('browser-host');
+      contentEl.innerHTML = `
+        <div class="popout-status">
+          <div class="popout-status-inner">
+            <div class="status-icon">🌐</div>
+            <div>Browser view is now on this window</div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+              The embedded browser has been moved to this window.<br>
+              Click <strong>Dock</strong> to return it to the main IDE.
+            </div>
+          </div>
+        </div>`;
+    } else if (panelType === 'inspector') {
+      contentEl.innerHTML = `
+        <div class="popout-status">
+          <div class="popout-status-inner">
+            <div class="status-icon">🔍</div>
+            <div>Inspector panel detached</div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+              Element inspection data will appear here as you inspect elements in the browser.<br>
+              Click <strong>Dock</strong> to return this panel to the main IDE.
+            </div>
+          </div>
+        </div>`;
+    } else if (panelType === 'console') {
+      contentEl.innerHTML = `
+        <div class="popout-status">
+          <div class="popout-status-inner">
+            <div class="status-icon">📋</div>
+            <div>Console & Logs panel detached</div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+              Console output, network requests, and replay logs will appear here.<br>
+              Click <strong>Dock</strong> to return this panel to the main IDE.
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // Dock button — send IPC to dock back
+    document.getElementById('btn-dock').addEventListener('click', () => {
+      if (window.popoutApi) {
+        window.popoutApi.dock();
+      }
+    });
+  </script>
+</body>
+</html>

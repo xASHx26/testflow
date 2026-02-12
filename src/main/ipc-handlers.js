@@ -607,6 +607,21 @@ function registerIpcHandlers(context) {
     windowManager.closeShortcutsWindow();
     return true;
   });
+
+  // ─── Pop-out Panel IPC ────────────────────────────────────
+  ipcMain.handle('popout:open', async (event, panelType) => {
+    windowManager.openPopoutWindow(panelType);
+    return true;
+  });
+
+  ipcMain.handle('popout:dock', async () => {
+    windowManager.dockPopoutWindow();
+    return true;
+  });
+
+  ipcMain.handle('popout:getPanel', async () => {
+    return windowManager.getActivePopout();
+  });
 }
 
 module.exports = { registerIpcHandlers };

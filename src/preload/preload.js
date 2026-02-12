@@ -135,6 +135,12 @@ contextBridge.exposeInMainWorld('testflow', {
     setPreset: (preset) => ipcRenderer.invoke('workspace:setPreset', preset),
   },
 
+  // ─── Pop-out Panels ────────────────────────────────────────
+  popout: {
+    open: (panelType) => ipcRenderer.invoke('popout:open', panelType),
+    dock: (panelType) => ipcRenderer.invoke('popout:dock', panelType),
+  },
+
   // ─── Report ────────────────────────────────────────────────
   report: {
     getSettings:        ()          => ipcRenderer.invoke('report:getSettings'),
@@ -157,6 +163,8 @@ contextBridge.exposeInMainWorld('testflow', {
       'menu:freeze-toggle', 'menu:screenshot',
       'menu:mini-inspector-toggle', 'menu:inspector-toggle',
       'menu:workspace-preset',
+      'menu:popout-panel',
+      'popout:opened', 'popout:docked',
       'menu:export-selenium-python', 'menu:export-markdown', 'menu:export-json',
       'menu:toggle-console', 'menu:toggle-network',
       'menu:about', 'menu:shortcuts',

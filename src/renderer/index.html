@@ -121,10 +121,19 @@
       <!-- Workspace Presets -->
       <div class="toolbar-group">
         <select id="workspace-preset" class="toolbar-select" title="Workspace Preset">
-          <option value="recorder">Recorder</option>
-          <option value="inspector">Inspector</option>
-          <option value="debug" selected>Debug</option>
-          <option value="review">Review</option>
+          <optgroup label="Modes">
+            <option value="recorder">Recorder</option>
+            <option value="inspector">Inspector</option>
+            <option value="debug" selected>Debug</option>
+            <option value="review">Review</option>
+          </optgroup>
+          <optgroup label="Layouts">
+            <option value="browser-only">Browser Only</option>
+            <option value="browser-inspector">Browser + Inspector</option>
+            <option value="browser-flows">Browser + Flows</option>
+            <option value="compact">Compact</option>
+            <option value="full">Full IDE</option>
+          </optgroup>
         </select>
       </div>
 

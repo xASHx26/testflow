@@ -304,6 +304,22 @@
   min-width: 400px;
 }
 
+.panel-browser.popped-out {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  position: relative;
+}
+
+.panel-browser.popped-out::after {
+  content: '🌐  Browser is on a separate window';
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.6;
+}
+
 /* ─── Bottom Panel ────────────────────────────────── */
 .panel-bottom {
   height: var(--panel-bottom-height);

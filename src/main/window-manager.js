@@ -19,6 +19,10 @@ class WindowManager {
     this.shortcutsWindow = null;
     this._browserViewHidden = false;
     this._savedBrowserBounds = null;
+
+    // Pop-out panel windows  { browser, inspector, console }
+    this.popoutWindows = {};
+    this._activePopout = null;   // which panel is currently popped out
   }
 
   /**
@@ -484,6 +488,147 @@ class WindowManager {
       this.shortcutsWindow.close();
     }
     this.shortcutsWindow = null;
+  }
+
+  // ─── Pop-out Panel Windows ─────────────────────────────────
+
+  /**
+   * Open a panel in its own separate window (for multi-monitor use).
+   * Supported panels: 'browser', 'inspector', 'console'
+   */
+  openPopoutWindow(panelType) {
+    // If this panel is already popped out, focus it
+    if (this.popoutWindows[panelType] && !this.popoutWindows[panelType].isDestroyed()) {
+      this.popoutWindows[panelType].focus();
+      return this.popoutWindows[panelType];
+    }
+
+    const sizes = {
+      browser:   { width: 1024, height: 768 },
+      inspector: { width: 420,  height: 600 },
+      console:   { width: 800,  height: 400 },
+    };
+
+    const size = sizes[panelType] || { width: 800, height: 600 };
+
+    // Try to position on a second monitor if available
+    const displays = screen.getAllDisplays();
+    let targetDisplay = displays.length > 1
+      ? displays.find(d => d.id !== screen.getPrimaryDisplay().id) || displays[0]
+      : displays[0];
+
+    const popoutWindow = new BrowserWindow({
+      width: size.width,
+      height: size.height,
+      x: targetDisplay.workArea.x + 50,
+      y: targetDisplay.workArea.y + 50,
+      title: `TestFlow — ${panelType.charAt(0).toUpperCase() + panelType.slice(1)}`,
+      parent: null,                  // independent window, not modal
+      alwaysOnTop: false,
+      frame: false,
+      backgroundColor: '#1e1e2e',
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'popout-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    popoutWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'popout-panel.html'),
+      { query: { panel: panelType } }
+    );
+
+    // For the browser panel, move the BrowserView to this window
+    if (panelType === 'browser' && this.browserView && this.mainWindow) {
+      popoutWindow.once('ready-to-show', () => {
+        // Move BrowserView from main window to popout
+        this.mainWindow.removeBrowserView(this.browserView);
+        popoutWindow.addBrowserView(this.browserView);
+
+        // Fill the popout window below the title bar (34px)
+        const { width, height } = popoutWindow.getContentBounds();
+        this.browserView.setBounds({ x: 0, y: 34, width, height: height - 34 });
+        this.browserView.setAutoResize({ width: true, height: true });
+        this._browserViewHidden = true;
+      });
+
+      // Re-layout BrowserView on popout resize
+      popoutWindow.on('resize', () => {
+        if (this.browserView) {
+          const { width, height } = popoutWindow.getContentBounds();
+          this.browserView.setBounds({ x: 0, y: 34, width, height: height - 34 });
+        }
+      });
+    }
+
+    popoutWindow.once('ready-to-show', () => {
+      popoutWindow.show();
+    });
+
+    popoutWindow.on('closed', () => {
+      // If this was the browser popout, re-dock automatically
+      if (panelType === 'browser') {
+        this._dockBrowserView();
+      }
+      delete this.popoutWindows[panelType];
+      // Notify renderer that the panel was docked back
+      this.sendToRenderer('popout:docked', panelType);
+    });
+
+    this.popoutWindows[panelType] = popoutWindow;
+    this._activePopout = panelType;
+
+    // Tell the renderer to hide the panel area since it's popped out
+    this.sendToRenderer('popout:opened', panelType);
+
+    return popoutWindow;
+  }
+
+  /**
+   * Dock a popped-out panel back into the main window.
+   */
+  dockPopoutWindow(panelType) {
+    const pType = panelType || this._activePopout;
+    if (!pType) return;
+
+    const win = this.popoutWindows[pType];
+    if (!win || win.isDestroyed()) return;
+
+    if (pType === 'browser') {
+      this._dockBrowserView();
+    }
+
+    win.close();
+    // 'closed' handler above cleans up popoutWindows + notifies renderer
+  }
+
+  /**
+   * Internal: move BrowserView back from popout to main window
+   */
+  _dockBrowserView() {
+    if (!this.browserView || !this.mainWindow) return;
+
+    const popout = this.popoutWindows['browser'];
+    if (popout && !popout.isDestroyed()) {
+      try {
+        popout.removeBrowserView(this.browserView);
+      } catch (_e) { /* already removed */ }
+    }
+
+    this.browserView.setAutoResize({ width: false, height: false });
+    this.mainWindow.addBrowserView(this.browserView);
+    this._browserViewHidden = false;
+
+    // Renderer will recalculate bounds on 'popout:docked' event
+  }
+
+  /**
+   * Get the panel type of the currently active popout (if any).
+   */
+  getActivePopout() {
+    return this._activePopout;
   }
 
   /**
