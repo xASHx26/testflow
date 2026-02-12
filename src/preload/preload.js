@@ -137,12 +137,13 @@ contextBridge.exposeInMainWorld('testflow', {
 
   // ─── Report ────────────────────────────────────────────────
   report: {
-    getSettings:    ()          => ipcRenderer.invoke('report:getSettings'),
-    updateSettings: (partial)   => ipcRenderer.invoke('report:updateSettings', partial),
-    resetSettings:  ()          => ipcRenderer.invoke('report:resetSettings'),
-    generate:       (payload)   => ipcRenderer.invoke('report:generate', payload),
-    openFolder:     (folderPath)=> ipcRenderer.invoke('report:openFolder', folderPath),
-    openHtml:       (htmlPath)  => ipcRenderer.invoke('report:openHtml', htmlPath),
+    getSettings:        ()          => ipcRenderer.invoke('report:getSettings'),
+    updateSettings:     (partial)   => ipcRenderer.invoke('report:updateSettings', partial),
+    resetSettings:      ()          => ipcRenderer.invoke('report:resetSettings'),
+    openSettingsWindow: ()          => ipcRenderer.invoke('report:openSettingsWindow'),
+    generate:           (payload)   => ipcRenderer.invoke('report:generate', payload),
+    openFolder:         (folderPath)=> ipcRenderer.invoke('report:openFolder', folderPath),
+    openHtml:           (htmlPath)  => ipcRenderer.invoke('report:openHtml', htmlPath),
   },
 
   // ─── Event Listeners (from main process / menu) ────────────

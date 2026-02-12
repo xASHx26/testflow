@@ -13,6 +13,7 @@ class WindowManager {
     this.mainWindow = null;
     this.browserView = null;
     this.miniInspectorWindow = null;
+    this.reportSettingsWindow = null;
     this._browserViewHidden = false;
     this._savedBrowserBounds = null;
   }
@@ -262,6 +263,58 @@ class WindowManager {
     }
     this.editorWindow = null;
     this._editorPayload = null;
+  }
+
+  // ─── Report Settings Window (modal BrowserWindow) ─────────
+  /**
+   * Open a modal window for editing report settings.
+   */
+  openReportSettingsWindow() {
+    if (this.reportSettingsWindow && !this.reportSettingsWindow.isDestroyed()) {
+      this.reportSettingsWindow.focus();
+      return;
+    }
+
+    this.reportSettingsWindow = new BrowserWindow({
+      width: 520,
+      height: 620,
+      minWidth: 420,
+      minHeight: 450,
+      parent: this.mainWindow,
+      modal: true,
+      show: false,
+      frame: false,
+      resizable: true,
+      backgroundColor: '#1e1e2e',
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'report-settings-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    this.reportSettingsWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'report-settings.html')
+    );
+
+    this.reportSettingsWindow.once('ready-to-show', () => {
+      this.reportSettingsWindow.show();
+    });
+
+    this.reportSettingsWindow.on('closed', () => {
+      this.reportSettingsWindow = null;
+    });
+  }
+
+  /**
+   * Close the report settings window if open.
+   */
+  closeReportSettingsWindow() {
+    if (this.reportSettingsWindow && !this.reportSettingsWindow.isDestroyed()) {
+      this.reportSettingsWindow.close();
+    }
+    this.reportSettingsWindow = null;
   }
 
   /**

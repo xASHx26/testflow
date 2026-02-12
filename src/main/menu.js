@@ -189,7 +189,7 @@ function buildAppMenu(context) {
         { type: 'separator' },
         {
           label: 'Report Settings',
-          click: () => windowManager.sendToRenderer('menu:report-settings'),
+          click: () => windowManager.openReportSettingsWindow(),
         },
       ],
     },

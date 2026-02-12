@@ -501,6 +501,30 @@ function registerIpcHandlers(context) {
     return reportConfig.reset();
   });
 
+  ipcMain.handle('report:openSettingsWindow', async () => {
+    windowManager.openReportSettingsWindow();
+    return true;
+  });
+
+  // ─── Report Settings Window IPC ───────────────────────────
+  ipcMain.handle('report-settings:get-data', async () => {
+    return reportConfig.get();
+  });
+
+  ipcMain.handle('report-settings:save', async (event, partial) => {
+    const updated = reportConfig.update(partial);
+    return updated;
+  });
+
+  ipcMain.handle('report-settings:reset', async () => {
+    return reportConfig.reset();
+  });
+
+  ipcMain.handle('report-settings:close', async () => {
+    windowManager.closeReportSettingsWindow();
+    return true;
+  });
+
   // ─── Report Generation ────────────────────────────────────
   ipcMain.handle('report:generate', async (event, payload) => {
     try {
