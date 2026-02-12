@@ -43,12 +43,26 @@
       "templates/**/*",
       "assets/**/*"
     ],
+    "forceCodeSigning": false,
     "win": {
       "target": [
-        "portable"
+        "nsis"
       ],
-      "icon": "assets/icon.png",
-      "sign": false
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false,
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TestFlow",
+      "installerSidebar": null,
+      "perMachine": false
     },
     "mac": {
       "target": "dmg",

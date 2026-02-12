@@ -32,11 +32,16 @@ if exist "dist" (
 )
 echo.
 
-:: Step 3: Build the app using electron-packager (no code signing issues)
-echo [3/4] Building TestFlow for Windows...
+:: Step 3: Build the installer using electron-builder (NSIS Setup .exe)
+echo [3/4] Building TestFlow Setup installer...
 echo      This may take a few minutes...
 echo.
-call npx @electron/packager . TestFlow --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icon.png --ignore="^/dist$|^/\.git|^/\.vscode|^/node_modules/puppeteer"
+
+:: Disable code signing to avoid symlink issues on non-admin Windows
+set CSC_IDENTITY_AUTO_DISCOVERY=false
+set CSC_LINK=
+
+call npx electron-builder --win --config
 if %ERRORLEVEL% neq 0 (
     echo.
     echo ========================================
@@ -54,13 +59,13 @@ echo ========================================
 
 :: Show output
 echo.
-echo Built to: dist\TestFlow-win32-x64\
-if exist "dist\TestFlow-win32-x64\TestFlow.exe" (
-    echo   TestFlow.exe found!
-) else (
-    echo   WARNING: TestFlow.exe not found in output
+echo Built installer:
+for %%f in (dist\*.exe) do (
+    echo   %%~nxf  ^(%%~zf bytes^)
 )
 echo.
+echo Share the "TestFlow Setup *.exe" file from dist\
+echo Users just double-click it to install.
 
 :: Step 4: Git commit and push
 echo [4/4] Pushing to Git...
@@ -80,8 +85,7 @@ if %ERRORLEVEL% equ 0 (
     echo      No changes to commit — already up to date.
 ) else (
     :: Get current date/time for commit message
-    for /f "tokens=2 delims==" %%i in ('wmic os get localdatetime /value') do set dt=%%i
-    set TIMESTAMP=%dt:~0,4%-%dt:~4,2%-%dt:~6,2% %dt:~8,2%:%dt:~10,2%
+    for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH:mm"') do set TIMESTAMP=%%i
 
     git commit -m "build: TestFlow v1.0.0-alpha — %TIMESTAMP%"
     if %ERRORLEVEL% neq 0 (
@@ -102,7 +106,7 @@ if %ERRORLEVEL% neq 0 (
 echo.
 echo ========================================
 echo   ALL DONE!
-echo   Build: dist\TestFlow-win32-x64\
+echo   Installer: dist\TestFlow Setup *.exe
 echo   Git: pushed to remote
 echo ========================================
 echo.
