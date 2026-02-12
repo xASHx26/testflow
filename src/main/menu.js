@@ -179,12 +179,12 @@ function buildAppMenu(context) {
       submenu: [
         {
           label: 'About TestFlow',
-          click: () => windowManager.sendToRenderer('menu:about'),
+          click: () => windowManager.openAboutWindow(),
         },
         {
           label: 'Keyboard Shortcuts',
           accelerator: 'CmdOrCtrl+K',
-          click: () => windowManager.sendToRenderer('menu:shortcuts'),
+          click: () => windowManager.openShortcutsWindow(),
         },
         { type: 'separator' },
         {

@@ -152,6 +152,7 @@
         <button class="tc-btn tc-btn-pagedata" data-action="download-pagedata" title="Download page data"${hasPageData ? '' : ' disabled'}>↓ PageData</button>
         <button class="tc-btn tc-btn-network" data-action="view-network" title="View network log"${hasNetwork ? '' : ' disabled'}>👁 Network</button>
         <button class="tc-btn tc-btn-network" data-action="download-network" title="Download network log"${hasNetwork ? '' : ' disabled'}>↓ Network</button>
+        <button class="tc-btn tc-btn-report" data-action="report" title="Generate report for this test case"${executionStore[idx] ? '' : ' disabled'}>📊 Report</button>
         <button class="tc-btn tc-btn-del" data-action="delete" title="Delete">✕</button>
       </div>
     `;
@@ -169,6 +170,7 @@
       else if (action === 'download-pagedata') downloadPageData(idx);
       else if (action === 'view-network')      viewNetworkLog(idx);
       else if (action === 'download-network')  downloadNetworkLog(idx);
+      else if (action === 'report')            generateSingleReport(idx);
       else if (action === 'delete')       deleteTestCase(idx);
     });
 
@@ -328,6 +330,31 @@
     // Disable report button if no executed tests remain
     if (btnReport && Object.keys(executionStore).length === 0) btnReport.disabled = true;
     render();
+  }
+
+  // ─── Generate Single Test Case Report ───────────────────────
+  async function generateSingleReport(idx) {
+    const tc = testCases[idx];
+    const exec = executionStore[idx];
+    if (!tc || !exec) return;
+
+    // Open the progress window
+    await window.testflow.report.openProgressWindow();
+
+    try {
+      const payload = {
+        testCases: [tc],
+        results: [exec.results || []],
+        screenshots: exec.screenshots || {},
+        startedAt: exec.startedAt || Date.now(),
+        finishedAt: exec.finishedAt || Date.now(),
+        projectName: `TestFlow — ${tc.name || 'Test Case'}`,
+      };
+
+      await window.testflow.report.generate(payload);
+    } catch (err) {
+      console.error('[TestCaseManager] Single report error:', err);
+    }
   }
 
   // ─── Inline Rename ──────────────────────────────────────────

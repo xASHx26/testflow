@@ -271,6 +271,15 @@
   color: var(--text-primary);
 }
 
+.tc-btn-report {
+  color: var(--accent-blue);
+  border-color: rgba(137, 180, 250, 0.3);
+}
+.tc-btn-report:hover {
+  background: rgba(137, 180, 250, 0.15);
+  color: var(--accent-blue);
+}
+
 .tc-btn-del {
   color: var(--accent-red);
   margin-left: auto;

@@ -150,7 +150,7 @@
       font-style: italic;
     }
     .field-input-number {
-      max-width: 80px;
+      max-width: 110px;
       text-align: center;
     }
     .field-hint {
@@ -329,10 +329,178 @@
       </label>
 
       <label class="toggle-row">
+        <input type="checkbox" data-path="advanced.groupByTag" />
+        <span class="toggle-label">Group test cases by tag</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="advanced.showStepDuration" />
+        <span class="toggle-label">Show step duration</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="advanced.showSkippedTests" />
+        <span class="toggle-label">Show skipped tests in report</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="advanced.embedScreenshotsInline" />
+        <span class="toggle-label">Embed screenshots inline</span>
+      </label>
+      <div class="toggle-desc">Embed screenshots as base64 directly in the HTML report</div>
+
+      <label class="toggle-row">
         <input type="checkbox" data-path="advanced.anonymizeSensitiveData" />
         <span class="toggle-label">Anonymize sensitive data</span>
       </label>
       <div class="toggle-desc">Mask passwords, tokens, and email addresses in reports</div>
+    </div>
+
+    <!-- Status Criteria -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">✅</span>
+        Pass / Fail / Skip Criteria
+      </div>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.passWhenAllStepsPass" />
+        <span class="toggle-label">Pass when all steps pass</span>
+      </label>
+      <div class="toggle-desc">Test case is marked Passed only when every step succeeds</div>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.failOnFirstStepFailure" />
+        <span class="toggle-label">Fail on first step failure</span>
+      </label>
+      <div class="toggle-desc">Mark the entire test as Failed as soon as the first step fails</div>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.skipWhenNoStepsExecuted" />
+        <span class="toggle-label">Skip when no steps executed</span>
+      </label>
+      <div class="toggle-desc">Test cases with zero executed steps are marked Skipped</div>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.treatTimeoutAsFail" />
+        <span class="toggle-label">Treat timeout as failure</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.treatElementNotFoundAsFail" />
+        <span class="toggle-label">Treat "element not found" as failure</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.treatNavigationErrorAsFail" />
+        <span class="toggle-label">Treat navigation error as failure</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.treatAssertionFailAsFail" />
+        <span class="toggle-label">Treat assertion failure as failure</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.treatNetworkErrorAsFail" />
+        <span class="toggle-label">Treat network error as failure</span>
+      </label>
+      <div class="toggle-desc">Mark test as failed when an API / network request fails (4xx/5xx)</div>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="statusCriteria.ignoreOptionalStepFailures" />
+        <span class="toggle-label">Ignore optional step failures</span>
+      </label>
+      <div class="toggle-desc">Steps marked as optional won't cause the test case to fail</div>
+    </div>
+
+    <!-- Execution / Timeouts -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">⏱</span>
+        Execution &amp; Timeouts
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">Step timeout (ms)</span>
+        <input type="number" class="field-input field-input-number" data-path="execution.defaultStepTimeoutMs" min="1000" max="300000" step="1000" />
+      </div>
+      <div class="field-hint">Maximum time to wait for a single step to complete</div>
+
+      <div class="field-row">
+        <span class="field-label">Navigation timeout (ms)</span>
+        <input type="number" class="field-input field-input-number" data-path="execution.defaultNavigationTimeoutMs" min="5000" max="300000" step="1000" />
+      </div>
+      <div class="field-hint">Maximum time to wait for page navigation</div>
+
+      <div class="field-row">
+        <span class="field-label">Retry failed steps</span>
+        <input type="number" class="field-input field-input-number" data-path="execution.retryFailedSteps" min="0" max="10" />
+      </div>
+      <div class="field-hint">Number of times to retry a failed step before marking it as failed</div>
+
+      <div class="field-row">
+        <span class="field-label">Retry failed tests</span>
+        <input type="number" class="field-input field-input-number" data-path="execution.retryFailedTests" min="0" max="5" />
+      </div>
+      <div class="field-hint">Number of times to re-run an entire failed test case</div>
+
+      <div class="field-row">
+        <span class="field-label">Delay between steps (ms)</span>
+        <input type="number" class="field-input field-input-number" data-path="execution.delayBetweenStepsMs" min="0" max="10000" step="100" />
+      </div>
+      <div class="field-hint">Artificial delay added between each step during replay</div>
+
+      <div class="field-row">
+        <span class="field-label">Delay between retries (ms)</span>
+        <input type="number" class="field-input field-input-number" data-path="execution.delayBetweenRetriesMs" min="0" max="30000" step="500" />
+      </div>
+
+      <label class="toggle-row">
+        <input type="checkbox" data-path="execution.continueOnFailure" />
+        <span class="toggle-label">Continue on failure</span>
+      </label>
+      <div class="toggle-desc">Continue executing remaining steps in a test case even after a step fails</div>
+    </div>
+
+    <!-- Report Metadata -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">🏷</span>
+        Report Metadata
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">Project name</span>
+        <input type="text" class="field-input" data-path="metadata.projectName" placeholder="TestFlow Report" />
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">Environment</span>
+        <input type="text" class="field-input" data-path="metadata.environment" placeholder="Development" />
+      </div>
+      <div class="field-hint">e.g. Development, Staging, Production, QA</div>
+
+      <div class="field-row">
+        <span class="field-label">Tester name</span>
+        <input type="text" class="field-input" data-path="metadata.testerName" placeholder="(optional)" />
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">Build number</span>
+        <input type="text" class="field-input" data-path="metadata.buildNumber" placeholder="(optional)" />
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">Tags</span>
+        <input type="text" class="field-input" data-path="metadata.tags" placeholder="smoke, regression, login" />
+      </div>
+      <div class="field-hint">Comma-separated tags to categorize this report</div>
+
+      <div class="field-row">
+        <span class="field-label">Description</span>
+        <input type="text" class="field-input" data-path="metadata.description" placeholder="(optional)" />
+      </div>
     </div>
 
   </div>

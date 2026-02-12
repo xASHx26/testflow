@@ -15,6 +15,8 @@ class WindowManager {
     this.miniInspectorWindow = null;
     this.reportSettingsWindow = null;
     this.reportProgressWindow = null;
+    this.aboutWindow = null;
+    this.shortcutsWindow = null;
     this._browserViewHidden = false;
     this._savedBrowserBounds = null;
   }
@@ -277,10 +279,10 @@ class WindowManager {
     }
 
     this.reportSettingsWindow = new BrowserWindow({
-      width: 520,
-      height: 620,
-      minWidth: 420,
-      minHeight: 450,
+      width: 540,
+      height: 750,
+      minWidth: 440,
+      minHeight: 500,
       parent: this.mainWindow,
       modal: true,
       show: false,
@@ -390,6 +392,98 @@ class WindowManager {
       this.reportProgressWindow.close();
     }
     this.reportProgressWindow = null;
+  }
+
+  // ─── About Window (modal BrowserWindow) ───────────────────
+  openAboutWindow() {
+    if (this.aboutWindow && !this.aboutWindow.isDestroyed()) {
+      this.aboutWindow.focus();
+      return;
+    }
+
+    this.aboutWindow = new BrowserWindow({
+      width: 560,
+      height: 680,
+      minWidth: 440,
+      minHeight: 500,
+      parent: this.mainWindow,
+      modal: true,
+      show: false,
+      frame: false,
+      resizable: true,
+      backgroundColor: '#1e1e2e',
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'about-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    this.aboutWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'about.html')
+    );
+
+    this.aboutWindow.once('ready-to-show', () => {
+      this.aboutWindow.show();
+    });
+
+    this.aboutWindow.on('closed', () => {
+      this.aboutWindow = null;
+    });
+  }
+
+  closeAboutWindow() {
+    if (this.aboutWindow && !this.aboutWindow.isDestroyed()) {
+      this.aboutWindow.close();
+    }
+    this.aboutWindow = null;
+  }
+
+  // ─── Shortcuts Window (modal BrowserWindow) ───────────────
+  openShortcutsWindow() {
+    if (this.shortcutsWindow && !this.shortcutsWindow.isDestroyed()) {
+      this.shortcutsWindow.focus();
+      return;
+    }
+
+    this.shortcutsWindow = new BrowserWindow({
+      width: 520,
+      height: 620,
+      minWidth: 400,
+      minHeight: 450,
+      parent: this.mainWindow,
+      modal: true,
+      show: false,
+      frame: false,
+      resizable: true,
+      backgroundColor: '#1e1e2e',
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'shortcuts-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    this.shortcutsWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'shortcuts.html')
+    );
+
+    this.shortcutsWindow.once('ready-to-show', () => {
+      this.shortcutsWindow.show();
+    });
+
+    this.shortcutsWindow.on('closed', () => {
+      this.shortcutsWindow = null;
+    });
+  }
+
+  closeShortcutsWindow() {
+    if (this.shortcutsWindow && !this.shortcutsWindow.isDestroyed()) {
+      this.shortcutsWindow.close();
+    }
+    this.shortcutsWindow = null;
   }
 
   /**

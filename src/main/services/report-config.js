@@ -34,6 +34,40 @@ const DEFAULTS = {
     includeRawJson:          true,
   },
 
+  // ─── Status Criteria ──────────────────────────────────────
+  statusCriteria: {
+    passWhenAllStepsPass:      true,
+    failOnFirstStepFailure:    true,
+    skipWhenNoStepsExecuted:   true,
+    treatTimeoutAsFail:        true,
+    treatElementNotFoundAsFail: true,
+    treatNavigationErrorAsFail: true,
+    treatAssertionFailAsFail:  true,
+    treatNetworkErrorAsFail:   false,
+    ignoreOptionalStepFailures: false,
+  },
+
+  // ─── Timeouts & Retry ────────────────────────────────────
+  execution: {
+    defaultStepTimeoutMs:    30000,
+    defaultNavigationTimeoutMs: 60000,
+    retryFailedSteps:        0,
+    retryFailedTests:        0,
+    delayBetweenStepsMs:     0,
+    delayBetweenRetriesMs:   1000,
+    continueOnFailure:       false,
+  },
+
+  // ─── Report Metadata ──────────────────────────────────────
+  metadata: {
+    projectName:             'TestFlow Report',
+    environment:             'Development',
+    testerName:              '',
+    buildNumber:             '',
+    tags:                    '',
+    description:             '',
+  },
+
   // ─── Advanced (future toggles) ────────────────────────────
   advanced: {
     includeNetworkLogs:      false,
@@ -42,6 +76,10 @@ const DEFAULTS = {
     includePerformanceMetrics: false,
     generateTrendChart:      false,
     anonymizeSensitiveData:  false,
+    groupByTag:              false,
+    showStepDuration:        true,
+    showSkippedTests:        true,
+    embedScreenshotsInline:  true,
   },
 };
 

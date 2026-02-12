@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keyboard Shortcuts</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* ── Header ──────────────────────────────────── */
+    .sc-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 18px;
+      background: var(--bg-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--bg-hover);
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    .sc-header > * { -webkit-app-region: no-drag; }
+    .sc-title-icon { font-size: 16px; }
+    .sc-title {
+      flex: 1;
+      -webkit-app-region: drag;
+      font-size: 14px;
+    }
+    .close-btn {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 4px;
+      background: transparent; color: var(--text-muted);
+      font-size: 14px; cursor: pointer;
+    }
+    .close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* ── Body ────────────────────────────────────── */
+    .sc-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px 16px;
+    }
+
+    /* ── Sections ────────────────────────────────── */
+    .section { margin-bottom: 20px; }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--accent-blue);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--bg-hover);
+    }
+    .section-heading-icon { font-size: 14px; }
+
+    /* ── Shortcut rows ───────────────────────────── */
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 5px;
+      transition: background 0.12s;
+    }
+    .shortcut-row:hover { background: var(--bg-hover); }
+
+    .shortcut-action {
+      flex: 1;
+      font-size: 12.5px;
+      color: var(--text-primary);
+    }
+
+    .shortcut-keys {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .key {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 26px;
+      padding: 3px 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--bg-active);
+      border-radius: 4px;
+      box-shadow: 0 1px 0 var(--bg-active);
+    }
+    .key-plus {
+      font-size: 10px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+    }
+
+    /* ── Footer ──────────────────────────────────── */
+    .sc-footer {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px 18px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--bg-hover);
+      flex-shrink: 0;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 24px;
+      font-size: 11.5px;
+      font-weight: 500;
+      border: 1px solid var(--bg-active);
+      border-radius: 5px;
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="sc-header">
+    <span class="sc-title-icon">⌨</span>
+    <span class="sc-title">Keyboard Shortcuts</span>
+    <button id="btn-close" class="close-btn" title="Close">✕</button>
+  </div>
+
+  <!-- Body -->
+  <div class="sc-body">
+
+    <!-- File -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">📁</span>
+        File
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">New Project</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">N</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Open Project</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">O</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Save Project</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">S</span></span>
+      </div>
+    </div>
+
+    <!-- Recording & Replay -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">🔴</span>
+        Recording &amp; Replay
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Start Recording</span>
+        <span class="shortcut-keys"><span class="key">F2</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Stop Recording</span>
+        <span class="shortcut-keys"><span class="key">Shift</span><span class="key-plus">+</span><span class="key">F2</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Pause / Resume Recording</span>
+        <span class="shortcut-keys"><span class="key">F3</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Start Replay</span>
+        <span class="shortcut-keys"><span class="key">F5</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Stop Replay</span>
+        <span class="shortcut-keys"><span class="key">Shift</span><span class="key-plus">+</span><span class="key">F5</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Step Over (Single Step)</span>
+        <span class="shortcut-keys"><span class="key">F10</span></span>
+      </div>
+    </div>
+
+    <!-- Tools -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">🛠</span>
+        Tools
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Freeze / Unfreeze Website</span>
+        <span class="shortcut-keys"><span class="key">F4</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Capture Screenshot</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">Shift</span><span class="key-plus">+</span><span class="key">S</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Toggle Mini Inspector</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">Shift</span><span class="key-plus">+</span><span class="key">I</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Toggle Element Inspector</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">Shift</span><span class="key-plus">+</span><span class="key">E</span></span>
+      </div>
+    </div>
+
+    <!-- View -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">👁</span>
+        View
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Toggle Console</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">`</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Developer Tools (IDE)</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">Shift</span><span class="key-plus">+</span><span class="key">I</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Reset Zoom</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">0</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Zoom In</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">=</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Zoom Out</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">-</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Toggle Fullscreen</span>
+        <span class="shortcut-keys"><span class="key">F11</span></span>
+      </div>
+    </div>
+
+    <!-- Help -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">❓</span>
+        Help
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Keyboard Shortcuts</span>
+        <span class="shortcut-keys"><span class="key">Ctrl</span><span class="key-plus">+</span><span class="key">K</span></span>
+      </div>
+    </div>
+
+    <!-- Test Cases -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-icon">📋</span>
+        Test Cases
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Rename Test Case</span>
+        <span class="shortcut-keys"><span class="key">Double-Click</span> <span class="key-plus">on</span> <span class="key">Name</span></span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-action">Close Modal Windows</span>
+        <span class="shortcut-keys"><span class="key">Esc</span></span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="sc-footer">
+    <button id="btn-ok" class="btn">Close</button>
+  </div>
+
+  <script src="js/shortcuts.js"></script>
+</body>
+</html>

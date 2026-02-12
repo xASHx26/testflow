@@ -577,6 +577,36 @@ function registerIpcHandlers(context) {
     shell.openExternal('file://' + htmlPath.replace(/\\\\/g, '/'));
     return true;
   });
+
+  // ─── About Window IPC ─────────────────────────────────────
+  ipcMain.handle('about:getSystemInfo', async () => {
+    const { app } = require('electron');
+    return {
+      appVersion:      app.getVersion(),
+      electronVersion: process.versions.electron,
+      chromeVersion:   process.versions.chrome,
+      nodeVersion:     process.versions.node,
+      platform:        process.platform,
+      arch:            process.arch,
+    };
+  });
+
+  ipcMain.handle('about:openExternal', async (event, url) => {
+    const { shell } = require('electron');
+    shell.openExternal(url);
+    return true;
+  });
+
+  ipcMain.handle('about:close', async () => {
+    windowManager.closeAboutWindow();
+    return true;
+  });
+
+  // ─── Shortcuts Window IPC ──────────────────────────────────
+  ipcMain.handle('shortcuts:close', async () => {
+    windowManager.closeShortcutsWindow();
+    return true;
+  });
 }
 
 module.exports = { registerIpcHandlers };
