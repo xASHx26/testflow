@@ -25,6 +25,7 @@
   const btnReplayAll    = document.getElementById('btn-replay-all');
   const btnClear        = document.getElementById('btn-clear-testcases');
   const btnClearLog     = document.getElementById('btn-clear-replay-log');
+  const btnReport       = document.getElementById('btn-generate-report');
 
   // ─── Listen for saved results from the modal editor window ──
   if (window.testflow?.editor?.onSaved) {
@@ -214,6 +215,8 @@
       appendLog(`⚠ Error running test case: ${err.message || err}`, 'error');
     }
     tc.networkLog = window.NetworkPanel?.getRequests?.() || [];
+    // Enable the report button now that at least one test has been executed
+    if (btnReport) btnReport.disabled = false;
     render();
   }
 
@@ -312,6 +315,18 @@
 
   function deleteTestCase(idx) {
     testCases.splice(idx, 1);
+    // Also remove execution data for this index and re-index
+    delete executionStore[idx];
+    const newStore = {};
+    for (const [k, v] of Object.entries(executionStore)) {
+      const ki = parseInt(k, 10);
+      if (ki > idx) newStore[ki - 1] = v;
+      else newStore[ki] = v;
+    }
+    Object.keys(executionStore).forEach(k => delete executionStore[k]);
+    Object.assign(executionStore, newStore);
+    // Disable report button if no executed tests remain
+    if (btnReport && Object.keys(executionStore).length === 0) btnReport.disabled = true;
     render();
   }
 
@@ -360,6 +375,8 @@
     if (idx >= 0) {
       testCases[idx].status = data.passed ? 'passed' : 'failed';
       testCases[idx].lastRun = Date.now();
+      // Enable the report button now that at least one test has been executed
+      if (btnReport) btnReport.disabled = false;
       render();
     }
   }
@@ -383,6 +400,9 @@
 
   btnClear?.addEventListener('click', () => {
     testCases.length = 0;
+    // Clear execution data and disable report button
+    Object.keys(executionStore).forEach(k => delete executionStore[k]);
+    if (btnReport) btnReport.disabled = true;
     render();
   });
 

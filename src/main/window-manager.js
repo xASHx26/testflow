@@ -331,10 +331,10 @@ class WindowManager {
 
     return new Promise((resolve) => {
       this.reportProgressWindow = new BrowserWindow({
-        width: 440,
-        height: 280,
-        minWidth: 360,
-        minHeight: 240,
+        width: 480,
+        height: 340,
+        minWidth: 400,
+        minHeight: 300,
         parent: this.mainWindow,
         modal: true,
         show: false,
