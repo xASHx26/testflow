@@ -2,9 +2,9 @@
  * TestFlow — Report UI
  *
  * Handles:
- *   • "Generate Report" button with progress bar & blocking overlay
+ *   • "Generate Report" button — opens a modal progress window
  *   • Help → Report Settings (separate window)
- *   • Invoking the main-process report engine and showing results
+ *   • Progress + result shown in the same modal window
  */
 
 (function () {
@@ -12,48 +12,6 @@
 
   const btnGenReport = document.getElementById('btn-generate-report');
   let generating = false;
-
-  // ═══════════════════════════════════════════════════════════
-  //  Dark overlay — blocks all interaction while generating
-  // ═══════════════════════════════════════════════════════════
-  const overlay = document.createElement('div');
-  overlay.id = 'report-gen-overlay';
-  overlay.innerHTML = `
-    <div class="rgo-card">
-      <div class="rgo-spinner"></div>
-      <div class="rgo-label">Generating report…</div>
-      <div class="rgo-bar-track">
-        <div class="rgo-bar-fill" id="rgo-bar-fill"></div>
-      </div>
-      <div class="rgo-pct" id="rgo-pct">0 %</div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
-  const barFill = document.getElementById('rgo-bar-fill');
-  const pctLabel = document.getElementById('rgo-pct');
-  const rgoLabel = overlay.querySelector('.rgo-label');
-
-  function showOverlay() {
-    setProgress(0, 'Preparing…');
-    overlay.classList.add('visible');
-  }
-  function hideOverlay() {
-    overlay.classList.remove('visible');
-  }
-  function setProgress(pct, label) {
-    const clamped = Math.max(0, Math.min(100, pct));
-    barFill.style.width = clamped + '%';
-    pctLabel.textContent = clamped + ' %';
-    if (label) rgoLabel.textContent = label;
-  }
-
-  // Listen for progress events from main process
-  window.testflow?.on?.('report:progress', (data) => {
-    if (data && typeof data.pct === 'number') {
-      setProgress(data.pct, data.label);
-    }
-  });
 
   // ═══════════════════════════════════════════════════════════
   //  Generate Report
@@ -77,7 +35,9 @@
     generating = true;
     btnGenReport.disabled = true;
     btnGenReport.textContent = '⏳ Generating…';
-    showOverlay();
+
+    // Open the modal progress window (blocks main window)
+    await window.testflow.report.openProgressWindow();
 
     try {
       const execStore = window.TestCaseManager?.getExecutionStore?.() || {};
@@ -107,15 +67,10 @@
         projectName: 'TestFlow Report',
       };
 
-      const result = await window.testflow.report.generate(payload);
-      hideOverlay();
-
-      // Open result in a separate modal window
-      window.testflow.report.showResult(result);
+      // Generate — progress + result are sent to the progress window by main process
+      await window.testflow.report.generate(payload);
     } catch (err) {
-      hideOverlay();
       console.error('[ReportUI] Report generation error:', err);
-      window.testflow.report.showResult({ success: false, error: err.message || 'Unexpected error generating report.' });
     } finally {
       generating = false;
       btnGenReport.disabled = false;

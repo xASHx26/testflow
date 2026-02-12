@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generating Report</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────────────────── */
+    .rp-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--bg-hover);
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    .rp-header > * { -webkit-app-region: no-drag; }
+    .rp-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      -webkit-app-region: drag;
+    }
+    .rp-close-btn {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 4px;
+      background: transparent; color: var(--text-muted);
+      font-size: 14px; cursor: pointer;
+      display: none;
+    }
+    .rp-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* ── Body ────────────────────────────────────── */
+    .rp-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 32px;
+      gap: 16px;
+      text-align: center;
+    }
+
+    /* ── Progress view ───────────────────────────── */
+    .rp-progress { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+
+    .rp-spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--bg-active, #45475a);
+      border-top-color: var(--accent-blue, #89b4fa);
+      border-radius: 50%;
+      animation: rp-spin 0.8s linear infinite;
+    }
+    @keyframes rp-spin { to { transform: rotate(360deg); } }
+
+    .rp-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .rp-bar-track {
+      width: 100%;
+      max-width: 320px;
+      height: 8px;
+      background: var(--bg-active, #45475a);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .rp-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-blue, #89b4fa), var(--accent-green, #a6e3a1));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .rp-pct {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-family: var(--font-mono, monospace);
+    }
+
+    /* ── Result view (hidden initially) ──────────── */
+    .rp-result { display: none; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+
+    .rp-result-icon { font-size: 42px; line-height: 1; }
+
+    .rp-result-message {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .rp-result-path {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      word-break: break-all;
+      line-height: 1.5;
+      padding: 8px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--bg-hover);
+      border-radius: 6px;
+      max-width: 100%;
+      display: none;
+    }
+
+    .rp-result-error {
+      font-size: 12px;
+      color: var(--accent-red);
+      padding: 8px 14px;
+      background: rgba(243,139,168,0.08);
+      border: 1px solid rgba(243,139,168,0.2);
+      border-radius: 6px;
+      max-width: 100%;
+      word-break: break-word;
+      display: none;
+    }
+
+    /* ── Footer ──────────────────────────────────── */
+    .rp-footer {
+      display: none;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--bg-hover);
+      flex-shrink: 0;
+    }
+
+    .rp-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 20px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--bg-active);
+      border-radius: 6px;
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
+    }
+    .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .rp-btn:active { transform: scale(0.97); }
+
+    .rp-btn-primary {
+      background: var(--accent-green);
+      color: var(--bg-primary);
+      border-color: var(--accent-green);
+      font-weight: 600;
+    }
+    .rp-btn-primary:hover { filter: brightness(1.1); }
+
+    .rp-btn-folder {
+      color: var(--accent-blue);
+      border-color: rgba(137,180,250,0.3);
+    }
+    .rp-btn-folder:hover {
+      background: rgba(137,180,250,0.1);
+      color: var(--accent-blue);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="rp-header">
+    <span class="rp-title" id="rp-title">Generating Report…</span>
+    <button id="rp-close-btn" class="rp-close-btn" title="Close">✕</button>
+  </div>
+
+  <!-- Body -->
+  <div class="rp-body">
+    <!-- Progress view -->
+    <div class="rp-progress" id="rp-progress">
+      <div class="rp-spinner" id="rp-spinner"></div>
+      <div class="rp-label" id="rp-label">Preparing…</div>
+      <div class="rp-bar-track">
+        <div class="rp-bar-fill" id="rp-bar-fill"></div>
+      </div>
+      <div class="rp-pct" id="rp-pct">0 %</div>
+    </div>
+
+    <!-- Result view (hidden until done) -->
+    <div class="rp-result" id="rp-result">
+      <div class="rp-result-icon" id="rp-result-icon">✅</div>
+      <div class="rp-result-message" id="rp-result-message">Report saved successfully!</div>
+      <div class="rp-result-path" id="rp-result-path"></div>
+      <div class="rp-result-error" id="rp-result-error"></div>
+    </div>
+  </div>
+
+  <!-- Footer (hidden until done) -->
+  <div class="rp-footer" id="rp-footer">
+    <button id="rp-btn-close" class="rp-btn">Close</button>
+    <button id="rp-btn-folder" class="rp-btn rp-btn-folder">📁 Open Folder</button>
+    <button id="rp-btn-open" class="rp-btn rp-btn-primary">📄 Open Report</button>
+  </div>
+
+  <script src="js/report-progress.js"></script>
+</body>
+</html>

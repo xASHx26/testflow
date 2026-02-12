@@ -141,7 +141,7 @@ contextBridge.exposeInMainWorld('testflow', {
     updateSettings:     (partial)   => ipcRenderer.invoke('report:updateSettings', partial),
     resetSettings:      ()          => ipcRenderer.invoke('report:resetSettings'),
     openSettingsWindow: ()          => ipcRenderer.invoke('report:openSettingsWindow'),
-    showResult:         (result)    => ipcRenderer.invoke('report:showResult', result),
+    openProgressWindow: ()          => ipcRenderer.invoke('report:openProgressWindow'),
     generate:           (payload)   => ipcRenderer.invoke('report:generate', payload),
     openFolder:         (folderPath)=> ipcRenderer.invoke('report:openFolder', folderPath),
     openHtml:           (htmlPath)  => ipcRenderer.invoke('report:openHtml', htmlPath),
@@ -161,7 +161,6 @@ contextBridge.exposeInMainWorld('testflow', {
       'menu:toggle-console', 'menu:toggle-network',
       'menu:about', 'menu:shortcuts',
       'menu:report-settings',
-      'report:progress',
       'console:log', 'network:request', 'network:clear',
       'workspace:preset-changed',
     ];

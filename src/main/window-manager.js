@@ -14,8 +14,7 @@ class WindowManager {
     this.browserView = null;
     this.miniInspectorWindow = null;
     this.reportSettingsWindow = null;
-    this.reportResultWindow = null;
-    this._reportResultPayload = null;
+    this.reportProgressWindow = null;
     this._browserViewHidden = false;
     this._savedBrowserBounds = null;
   }
@@ -319,24 +318,22 @@ class WindowManager {
     this.reportSettingsWindow = null;
   }
 
-  // ─── Report Result Window (modal BrowserWindow) ────────
+  // ─── Report Progress Window (modal BrowserWindow) ─────────
   /**
-   * Open a modal window showing report generation result.
-   * @param {Object} payload  { success, reportDir, indexPath, error }
+   * Open a modal progress window for report generation.
+   * Shows progress bar, then transitions to result view.
    */
-  openReportResultWindow(payload) {
-    if (this.reportResultWindow && !this.reportResultWindow.isDestroyed()) {
-      this.reportResultWindow.focus();
+  openReportProgressWindow() {
+    if (this.reportProgressWindow && !this.reportProgressWindow.isDestroyed()) {
+      this.reportProgressWindow.focus();
       return;
     }
 
-    this._reportResultPayload = payload;
-
-    this.reportResultWindow = new BrowserWindow({
+    this.reportProgressWindow = new BrowserWindow({
       width: 440,
-      height: 310,
+      height: 280,
       minWidth: 360,
-      minHeight: 260,
+      minHeight: 240,
       parent: this.mainWindow,
       modal: true,
       show: false,
@@ -344,43 +341,52 @@ class WindowManager {
       resizable: false,
       backgroundColor: '#1e1e2e',
       webPreferences: {
-        preload: path.join(__dirname, '..', 'preload', 'report-result-preload.js'),
+        preload: path.join(__dirname, '..', 'preload', 'report-progress-preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
       },
     });
 
-    this.reportResultWindow.loadFile(
-      path.join(__dirname, '..', 'renderer', 'report-result.html')
+    this.reportProgressWindow.loadFile(
+      path.join(__dirname, '..', 'renderer', 'report-progress.html')
     );
 
-    this.reportResultWindow.once('ready-to-show', () => {
-      this.reportResultWindow.show();
+    this.reportProgressWindow.once('ready-to-show', () => {
+      this.reportProgressWindow.show();
     });
 
-    this.reportResultWindow.on('closed', () => {
-      this.reportResultWindow = null;
-      this._reportResultPayload = null;
+    this.reportProgressWindow.on('closed', () => {
+      this.reportProgressWindow = null;
     });
   }
 
   /**
-   * Returns the payload stored for the report result window.
+   * Send a progress update to the progress window.
    */
-  getReportResultPayload() {
-    return this._reportResultPayload || null;
-  }
-
-  /**
-   * Close the report result window if open.
-   */
-  closeReportResultWindow() {
-    if (this.reportResultWindow && !this.reportResultWindow.isDestroyed()) {
-      this.reportResultWindow.close();
+  sendProgressUpdate(pct, label) {
+    if (this.reportProgressWindow && !this.reportProgressWindow.isDestroyed()) {
+      this.reportProgressWindow.webContents.send('report:progress', { pct, label });
     }
-    this.reportResultWindow = null;
-    this._reportResultPayload = null;
+  }
+
+  /**
+   * Send the final result to the progress window so it transitions to result view.
+   */
+  sendProgressResult(result) {
+    if (this.reportProgressWindow && !this.reportProgressWindow.isDestroyed()) {
+      this.reportProgressWindow.webContents.send('report:result', result);
+    }
+  }
+
+  /**
+   * Close the report progress window if open.
+   */
+  closeReportProgressWindow() {
+    if (this.reportProgressWindow && !this.reportProgressWindow.isDestroyed()) {
+      this.reportProgressWindow.close();
+    }
+    this.reportProgressWindow = null;
   }
 
   /**

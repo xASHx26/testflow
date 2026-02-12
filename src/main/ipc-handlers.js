@@ -525,30 +525,26 @@ function registerIpcHandlers(context) {
     return true;
   });
 
-  // ─── Report Result Window IPC ──────────────────────────────
-  ipcMain.handle('report-result:get-data', async () => {
-    return windowManager.getReportResultPayload();
+  // ─── Report Progress Window IPC ────────────────────────────
+  ipcMain.handle('report:openProgressWindow', async () => {
+    windowManager.openReportProgressWindow();
+    return true;
   });
 
-  ipcMain.handle('report-result:open-report', async (event, htmlPath) => {
+  ipcMain.handle('report-progress:open-report', async (event, htmlPath) => {
     const { shell } = require('electron');
     shell.openExternal('file://' + htmlPath.replace(/\\/g, '/'));
     return true;
   });
 
-  ipcMain.handle('report-result:open-folder', async (event, folderPath) => {
+  ipcMain.handle('report-progress:open-folder', async (event, folderPath) => {
     const { shell } = require('electron');
     shell.openPath(folderPath);
     return true;
   });
 
-  ipcMain.handle('report-result:close', async () => {
-    windowManager.closeReportResultWindow();
-    return true;
-  });
-
-  ipcMain.handle('report:showResult', async (event, resultPayload) => {
-    windowManager.openReportResultWindow(resultPayload);
+  ipcMain.handle('report-progress:close', async () => {
+    windowManager.closeReportProgressWindow();
     return true;
   });
 
@@ -556,13 +552,17 @@ function registerIpcHandlers(context) {
   ipcMain.handle('report:generate', async (event, payload) => {
     try {
       const onProgress = (pct, label) => {
-        windowManager.sendToRenderer('report:progress', { pct, label });
+        windowManager.sendProgressUpdate(pct, label);
       };
       const result = await reportEngine.generate(payload, onProgress);
-      return { success: true, ...result };
+      const finalResult = { success: true, ...result };
+      windowManager.sendProgressResult(finalResult);
+      return finalResult;
     } catch (err) {
       console.error('[ReportEngine] Generation failed:', err);
-      return { success: false, error: err.message };
+      const finalResult = { success: false, error: err.message };
+      windowManager.sendProgressResult(finalResult);
+      return finalResult;
     }
   });
 
