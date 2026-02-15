@@ -87,10 +87,10 @@ class TabManager {
     if (!this.tabsEl) return;
     this.tabsEl.innerHTML = '';
 
-    // Hide tab bar if only 0 or 1 tabs
+    // Always show the tab bar (user needs the + button to create tabs)
     const tabBar = document.getElementById('browser-tab-bar');
     if (tabBar) {
-      tabBar.style.display = this.tabs.length <= 1 ? 'none' : '';
+      tabBar.style.display = '';
     }
 
     this.tabs.forEach((tab) => {

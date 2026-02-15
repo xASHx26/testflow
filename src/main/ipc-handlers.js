@@ -485,11 +485,9 @@ function registerIpcHandlers(context) {
   });
 
   // ─── Network Logs ────────────────────────────────────────────
-  // Only forward network traffic during recording or replay sessions
+  // Always forward network traffic to the renderer for the Network panel
   browserEngine.on('network-response', (data) => {
-    if (testSessionActive) {
-      windowManager.sendToRenderer('network:request', data);
-    }
+    windowManager.sendToRenderer('network:request', data);
   });
 
   // ─── Workspace Presets ───────────────────────────────────────

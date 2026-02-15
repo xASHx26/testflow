@@ -13,6 +13,8 @@ class InspectorUI {
     this.testDataRows = []; // { id, key, value, source }
     this._locatorsCollapsed = false;
     this._valuesCollapsed = false;
+    this._singleElementMode = false;  // 🔍 search mode: replaces instead of stacking
+    this._elemCollapsed = {};         // per-element collapse state, keyed by entry.id
 
     this._counter = 0;
 
@@ -27,6 +29,11 @@ class InspectorUI {
   }
 
   _uid() { return `iui-${++this._counter}-${Date.now()}`; }
+
+  /** Toggle single-element mode (search inspector: replaces instead of stacking) */
+  setSingleElementMode(on) {
+    this._singleElementMode = !!on;
+  }
 
   _listen() {
     window.EventBus.on('step:selected', (step) => this._importStep(step));
@@ -66,14 +73,23 @@ class InspectorUI {
 
     const fingerprint = this._elementFingerprint(data);
 
-    // Remove previous entry for the same element (dedup)
-    const existingIdx = this.elements.findIndex(
-      e => this._elementFingerprint(e.data) === fingerprint
-    );
-    if (existingIdx !== -1) {
-      // Also remove test-data rows that came from this element
-      this.testDataRows = this.testDataRows.filter(r => r._fingerprint !== fingerprint);
-      this.elements.splice(existingIdx, 1);
+    // In single-element mode (🔍 search), clear all previous elements
+    if (this._singleElementMode) {
+      this.elements = [];
+      this.testDataRows = [];
+      this._elemCollapsed = {};
+    } else {
+      // Remove previous entry for the same element (dedup)
+      const existingIdx = this.elements.findIndex(
+        e => this._elementFingerprint(e.data) === fingerprint
+      );
+      if (existingIdx !== -1) {
+        // Also remove test-data rows that came from this element
+        this.testDataRows = this.testDataRows.filter(r => r._fingerprint !== fingerprint);
+        const removedId = this.elements[existingIdx].id;
+        delete this._elemCollapsed[removedId];
+        this.elements.splice(existingIdx, 1);
+      }
     }
 
     const label = data.id || data.name || data.tag || 'Element';
@@ -220,7 +236,7 @@ class InspectorUI {
 
     // Collect all locators grouped by element
     const totalLocs = this.elements.reduce((n, e) => n + (e.locators || []).length, 0);
-    if (totalLocs === 0) return;
+    if (totalLocs === 0 && this.elements.length === 0) return;
 
     const header = document.createElement('div');
     header.className = 'locator-section-header collapsible-header';
@@ -237,18 +253,78 @@ class InspectorUI {
     list.className = 'locator-entries';
 
     this.elements.forEach((entry, idx) => {
-      if (!entry.locators || entry.locators.length === 0) return;
-
-      // ─── Element group indicator ───────────────────
+      // ─── Element group header (collapsible per-element) ─────
+      const isCollapsed = !!this._elemCollapsed[entry.id];
       const groupHeader = document.createElement('div');
-      groupHeader.className = 'locator-group-header';
+      groupHeader.className = 'locator-group-header locator-group-collapsible';
       groupHeader.innerHTML = `
+        <span class="collapse-arrow">${isCollapsed ? '▶' : '▼'}</span>
         <span class="locator-group-index">${idx + 1}</span>
         <span class="locator-group-label">${this._esc(entry.label)}</span>
         <span class="locator-group-tag">&lt;${this._esc(entry.data?.tag || '?')}&gt;</span>
-        <span class="locator-group-count">${entry.locators.length} locators</span>
+        <span class="locator-group-count">${(entry.locators || []).length} locators</span>
       `;
+      groupHeader.style.cursor = 'pointer';
+      groupHeader.addEventListener('click', () => {
+        this._elemCollapsed[entry.id] = !this._elemCollapsed[entry.id];
+        this._renderLocators();
+      });
       list.appendChild(groupHeader);
+
+      if (isCollapsed) return; // skip locators + HTML for collapsed element
+
+      // ─── Element HTML section (innerHTML + outerHTML) ─────
+      if (entry.data?.outerHTML) {
+        const htmlSection = document.createElement('div');
+        htmlSection.className = 'locator-html-section';
+
+        // Element tag display
+        const tagLine = document.createElement('div');
+        tagLine.className = 'locator-html-tag';
+        const d = entry.data;
+        const tagParts = [`<${this._esc(d.tag || '?')}`];
+        if (d.id) tagParts.push(` id="${this._esc(d.id)}"`);
+        if (d.name) tagParts.push(` name="${this._esc(d.name)}"`);
+        if (d.classes && d.classes.length) {
+          const cls = Array.isArray(d.classes) ? d.classes.join(' ') : d.classes;
+          tagParts.push(` class="${this._esc(cls)}"`);
+        }
+        tagParts.push('>');
+        tagLine.innerHTML = `<span class="html-label">Element</span><code class="html-code copyable" title="Click to copy">${tagParts.join('')}</code>`;
+        tagLine.querySelector('.html-code').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._copyToClipboard(tagParts.join(''), e.target);
+        });
+        htmlSection.appendChild(tagLine);
+
+        // outerHTML display
+        const outerLine = document.createElement('div');
+        outerLine.className = 'locator-html-outer';
+        const truncatedOuter = d.outerHTML.length > 500
+          ? d.outerHTML.substring(0, 500) + '…'
+          : d.outerHTML;
+        outerLine.innerHTML = `
+          <div class="html-outer-header">
+            <span class="html-label">outerHTML</span>
+            <button class="ec-btn loc-copy-html" title="Copy full outerHTML">📋</button>
+          </div>
+          <pre class="html-outer-code">${this._esc(truncatedOuter)}</pre>
+        `;
+        outerLine.querySelector('.loc-copy-html').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._copyToClipboard(d.outerHTML, e.target);
+        });
+        outerLine.querySelector('.html-outer-code').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._copyToClipboard(d.outerHTML, e.target);
+        });
+        htmlSection.appendChild(outerLine);
+
+        list.appendChild(htmlSection);
+      }
+
+      // ─── Locator cards ─────────────────────────────────
+      if (!entry.locators || entry.locators.length === 0) return;
 
       entry.locators.forEach((loc) => {
         const card = document.createElement('div');

@@ -567,6 +567,23 @@
   margin-top: 0;
 }
 
+.locator-group-collapsible {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.locator-group-collapsible:hover {
+  background: var(--bg-hover);
+}
+
+.locator-group-collapsible .collapse-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+
 .locator-group-index {
   min-width: 20px;
   height: 20px;
@@ -601,6 +618,79 @@
   color: var(--text-muted);
   margin-left: auto;
   flex-shrink: 0;
+}
+
+/* ─── Element HTML Section (outerHTML) ────────────── */
+.locator-html-section {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin: 2px 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--accent-peach);
+}
+
+.locator-html-tag {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: 4px;
+}
+
+.html-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.html-code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--accent-blue);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.html-code:hover {
+  background: var(--bg-hover);
+}
+
+.html-outer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.html-outer-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+  margin: 0;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+}
+
+.html-outer-code:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
 }
 
 /* ─── Copyable text (click-to-copy) ───────────────── */

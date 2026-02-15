@@ -309,13 +309,17 @@ class Toolbar {
       this.isInspecting = !this.isInspecting;
 
       if (this.isInspecting) {
+        // Accumulate mode (stacks elements)
+        if (window.InspectorUI) window.InspectorUI.setSingleElementMode(false);
         await window.testflow.inspector.enable();
         this.btnInspector.classList.add('active');
+        this.btnMiniInspector.classList.remove('active');
         // Show the right panel if hidden, uncollapse if collapsed
         window.PanelManager.showPanel('right');
         this._setStatus('inspecting', 'Inspector');
         this._log('info', 'Element Inspector enabled — hover to inspect');
       } else {
+        if (window.InspectorUI) window.InspectorUI.setSingleElementMode(false);
         await window.testflow.inspector.disable();
         this.btnInspector.classList.remove('active');
         // Don't hide — just stop inspecting. Panel stays visible.
@@ -330,10 +334,30 @@ class Toolbar {
 
   async _toggleMiniInspector() {
     try {
-      const visible = await window.testflow.miniInspector.toggle();
-      this.btnMiniInspector.classList.toggle('active', visible);
+      // Single-element search inspector: enables the inspector in
+      // "search mode" — each click replaces the previous element
+      // instead of stacking multiple elements.
+      this.isInspecting = !this.isInspecting;
+
+      if (this.isInspecting) {
+        // Enable single-element mode on InspectorUI
+        if (window.InspectorUI) window.InspectorUI.setSingleElementMode(true);
+        await window.testflow.inspector.enable();
+        this.btnMiniInspector.classList.add('active');
+        this.btnInspector.classList.remove('active');
+        window.PanelManager.showPanel('right');
+        this._setStatus('inspecting', 'Search Inspector');
+        this._log('info', 'Search Inspector — click one element (replaces previous)');
+      } else {
+        if (window.InspectorUI) window.InspectorUI.setSingleElementMode(false);
+        await window.testflow.inspector.disable();
+        this.btnMiniInspector.classList.remove('active');
+        this._setStatus('idle', 'Ready');
+        this._log('info', 'Search Inspector disabled');
+      }
+      window.EventBus.emit('inspector:toggled', this.isInspecting);
     } catch (err) {
-      this._log('error', `Mini Inspector failed: ${err.message}`);
+      this._log('error', `Search Inspector failed: ${err.message}`);
     }
   }
 

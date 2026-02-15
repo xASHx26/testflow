@@ -341,6 +341,10 @@
 
         // CSS selector
         cssSelector: this._getCSSSelector(el),
+
+        // HTML content (truncated for large elements)
+        innerHTML: (el.innerHTML || '').substring(0, 2000),
+        outerHTML: (el.outerHTML || '').substring(0, 3000),
       };
     },
 
