@@ -720,6 +720,160 @@ class ReplayEngine extends EventEmitter {
         break;
       }
 
+      // ─── Date/Time/DateTime Setting ──────────────────────────
+      // Programmatic value setting with React state synchronization.
+      // Records VALUE not click sequences — handles native, react-datepicker,
+      // MUI, Ant Design, Chakra UI, PrimeReact, Flatpickr, and generic calendars.
+      case 'set_date':
+      case 'set_time':
+      case 'set_datetime': {
+        // Get the ISO value (primary test data value), skipping __meta keys
+        const tdEntries = Object.entries(step.testData || {});
+        const dataEntry = tdEntries.find(([k]) => !k.endsWith('__meta'));
+        const isoValue = dataEntry ? String(dataEntry[1]) : '';
+        const meta = tdEntries.find(([k]) => k.endsWith('__meta'));
+        const metaObj = meta ? meta[1] : {};
+        const framework = metaObj.framework || step.framework || 'native';
+        const displayVal = isoValue.length > 16 ? isoValue.slice(0, 16) : isoValue;
+        const actionLabel = step.type === 'set_time' ? 'time' : step.type === 'set_datetime' ? 'date/time' : 'date';
+        const escaped = isoValue.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+        await this._visualMoveAndHighlight(locatorJs, `set ${actionLabel}: "${displayVal}"`);
+        await this._visualClickRipple();
+
+        // Programmatic value setting with full React event dispatch
+        const setResult = await this.browserEngine.executeScript(`
+          (() => {
+            const el = ${locatorJs};
+            if (!el) return 'not-found';
+            const tag = (el.tagName || '').toLowerCase();
+            const type = (el.type || '').toLowerCase();
+            const value = '${escaped}';
+            const framework = '${framework}';
+
+            // ─── Strategy 1: Native date/time/datetime-local inputs ───
+            if (tag === 'input' && ['date','time','datetime-local','month','week'].includes(type)) {
+              // Use native setter to bypass React's controlled component guard
+              const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value')?.set;
+              if (nativeSetter) nativeSetter.call(el, value);
+              else el.value = value;
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return 'ok-native';
+            }
+
+            // ─── Strategy 2: React-controlled text input (frameworks) ──
+            // Most date picker libraries render a text input with type="text"
+            // and manage the value through React state.
+
+            // Focus the input first
+            if (typeof el.focus === 'function') el.focus();
+
+            // Clear current value
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value')?.set ||
+              Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype, 'value')?.set;
+
+            if (nativeSetter) {
+              nativeSetter.call(el, '');
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            // Set the new value via native setter (React intercepts this)
+            if (nativeSetter) {
+              nativeSetter.call(el, value);
+            } else {
+              el.value = value;
+            }
+
+            // Dispatch the full event sequence that React listens for
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // For React 16+: trigger the synthetic event system
+            // React uses a custom event property tracker
+            const tracker = el._valueTracker;
+            if (tracker) {
+              tracker.setValue('');  // Force React to see a change
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // ─── Framework-specific post-processing ─────────────
+            if (framework === 'react-datepicker') {
+              // react-datepicker may need Enter or Tab to confirm
+              el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+            } else if (framework === 'antd') {
+              // Ant Design may need Enter to confirm selection
+              el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+            } else if (framework === 'flatpickr') {
+              // Flatpickr: programmatic API if available
+              if (el._flatpickr) {
+                try { el._flatpickr.setDate(value, true); return 'ok-flatpickr-api'; }
+                catch(e) {}
+              }
+            }
+
+            // Blur to trigger validation / close popups
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            return 'ok-framework';
+          })()
+        `);
+
+        if (setResult === 'not-found') throw new Error(`${actionLabel} element not found during action`);
+
+        // Wait for framework to process the value change and close any popup
+        await this._sleep(500);
+
+        // Verify the value was set correctly (non-fatal check)
+        const verifyOk = await this.browserEngine.executeScript(`
+          (() => {
+            const el = ${locatorJs};
+            if (!el) return false;
+            const current = el.value || '';
+            const expected = '${escaped}';
+            // Exact match or contains (some frameworks reformat)
+            return current === expected || current.includes(expected) || expected.includes(current);
+          })()
+        `);
+        if (!verifyOk) {
+          // Try a secondary strategy: click to open popup, then re-set
+          await this.browserEngine.executeScript(`
+            (() => {
+              const el = ${locatorJs};
+              if (!el) return;
+              el.click();
+            })()
+          `);
+          await this._sleep(500);
+          await this.browserEngine.executeScript(`
+            (() => {
+              const el = ${locatorJs};
+              if (!el) return;
+              const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value')?.set;
+              if (nativeSetter) nativeSetter.call(el, '${escaped}');
+              else el.value = '${escaped}';
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              const tracker = el._valueTracker;
+              if (tracker) tracker.setValue('');
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+              el.dispatchEvent(new Event('blur', { bubbles: true }));
+            })()
+          `);
+          await this._sleep(300);
+        }
+
+        await this._visualCleanup();
+        break;
+      }
+
       // Handle navigate type within a step (mid-flow navigation)
       case 'navigate': {
         const url = step.testData?.url || step.url;
@@ -1175,6 +1329,21 @@ class ReplayEngine extends EventEmitter {
             // Infer tag from controlType so _performAction routes correctly
             tag: ct === 'select' || ct === 'combobox' || ct === 'listbox' ? 'select' : '',
           };
+
+          // v3: for date/time actions, include the __meta in testData
+          // so the replay handler can access framework info
+          if (['set_date', 'set_time', 'set_datetime'].includes(step.type)) {
+            if (meta.framework || meta.controlSubType || meta.isoValue) {
+              step.testData[tc.testDataKey + '__meta'] = {
+                isoValue: meta.isoValue || '',
+                displayFormat: meta.displayFormat || '',
+                timezone: meta.timezone || '',
+                framework: meta.framework || 'native',
+                controlSubType: meta.controlSubType || 'native',
+              };
+            }
+            step.framework = meta.framework || 'native';
+          }
         }
         // Legacy support: old-style per-step testData {field, value, type}
         else if (tc.testData) {

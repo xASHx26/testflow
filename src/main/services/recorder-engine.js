@@ -301,6 +301,12 @@ class RecorderEngine extends EventEmitter {
       dragStartY: rawAction.dragStartY ?? null,
       dragEndX: rawAction.dragEndX ?? null,
       dragEndY: rawAction.dragEndY ?? null,
+      // v3: date/time metadata
+      isoValue: rawAction.isoValue || null,
+      displayFormat: rawAction.displayFormat || null,
+      timezone: rawAction.timezone || null,
+      framework: rawAction.framework || null,
+      controlSubType: rawAction.controlSubType || null,
     };
 
     // Add step to flow
@@ -355,6 +361,11 @@ class RecorderEngine extends EventEmitter {
 
     if (action === 'navigate') return 'navigate';
 
+    // Date/time picker actions (v3: intent-driven date/time recording)
+    if (action === 'set_date')     return 'set_date';
+    if (action === 'set_time')     return 'set_time';
+    if (action === 'set_datetime') return 'set_datetime';
+
     // Text input (v2: 'input', legacy: 'type')
     if (action === 'input' || action === 'type') return 'input';
 
@@ -385,6 +396,10 @@ class RecorderEngine extends EventEmitter {
       if (ct === 'checkbox' || ct === 'toggle' || (tag === 'input' && type === 'checkbox')) return 'toggle';
       if (ct === 'radio' || (tag === 'input' && type === 'radio')) return 'radio';
       if (ct === 'slider' || (tag === 'input' && type === 'range')) return 'slider';
+      // Date/time changes from native inputs (if not already set_date/set_time/set_datetime)
+      if (ct === 'date' || ct === 'month' || ct === 'week' || (tag === 'input' && (type === 'date' || type === 'month' || type === 'week'))) return 'set_date';
+      if (ct === 'time' || (tag === 'input' && type === 'time')) return 'set_time';
+      if (ct === 'datetime' || (tag === 'input' && type === 'datetime-local')) return 'set_datetime';
       return 'change';
     }
 
@@ -415,6 +430,21 @@ class RecorderEngine extends EventEmitter {
         if (ct === 'checkbox') return `Toggle checkbox "${truncated}"`;
         if (ct === 'radio')    return `Select radio "${truncated}"`;
         return `Click on "${truncated}"`;
+      case 'set_date': {
+        const dateVal = rawAction.isoValue || rawAction.value || '';
+        const humanDate = this._formatDateHuman(dateVal, 'date');
+        return `Set date "${truncated}" to ${humanDate}`;
+      }
+      case 'set_time': {
+        const timeVal = rawAction.isoValue || rawAction.value || '';
+        const humanTime = this._formatDateHuman(timeVal, 'time');
+        return `Set time "${truncated}" to ${humanTime}`;
+      }
+      case 'set_datetime': {
+        const dtVal = rawAction.isoValue || rawAction.value || '';
+        const humanDt = this._formatDateHuman(dtVal, 'datetime');
+        return `Set date/time "${truncated}" to ${humanDt}`;
+      }
       case 'type':
       case 'input':
         return `Type "${rawAction.value || ''}" into "${truncated}"`;
@@ -428,8 +458,6 @@ class RecorderEngine extends EventEmitter {
           return `Set "${truncated}" to ${rawAction.value}`;
         if (ct === 'color') return `Pick color ${rawAction.value} for "${truncated}"`;
         if (ct === 'file')  return `Upload "${rawAction.value}" to "${truncated}"`;
-        if (['date', 'time', 'datetime', 'month', 'week'].includes(ct))
-          return `Set "${truncated}" to ${rawAction.value}`;
         return `Change "${truncated}" to "${rawAction.value || ''}"`;
       case 'submit':
         return `Submit form "${truncated}"`;
@@ -462,6 +490,60 @@ class RecorderEngine extends EventEmitter {
   }
 
   /**
+   * Format a date/time value for human-readable display in descriptions.
+   * "2025-01-15" → "15 Jan 2025"
+   * "14:30" → "2:30 PM"
+   * "2025-01-15T14:30" → "15 Jan 2025 at 2:30 PM"
+   */
+  _formatDateHuman(value, type) {
+    if (!value) return '(empty)';
+    const str = String(value).trim();
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    try {
+      if (type === 'time') {
+        // HH:MM or HH:MM:SS
+        const parts = str.split(':');
+        if (parts.length >= 2) {
+          let h = parseInt(parts[0], 10);
+          const m = parts[1].padStart(2, '0');
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          if (h > 12) h -= 12;
+          if (h === 0) h = 12;
+          return `${h}:${m} ${ampm}`;
+        }
+        return str;
+      }
+
+      if (type === 'date') {
+        // YYYY-MM-DD
+        const d = new Date(str + 'T00:00:00');
+        if (!isNaN(d.getTime())) {
+          return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+        }
+        return str;
+      }
+
+      if (type === 'datetime') {
+        // YYYY-MM-DDTHH:MM
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          let h = d.getHours();
+          const m = String(d.getMinutes()).padStart(2, '0');
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          if (h > 12) h -= 12;
+          if (h === 0) h = 12;
+          return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} at ${h}:${m} ${ampm}`;
+        }
+        return str;
+      }
+    } catch (e) { /* fall through */ }
+
+    return str;
+  }
+
+  /**
    * Extract test data as a simple key→value pair.
    *
    * Every interaction that carries a value produces { sanitized_key: value }.
@@ -475,6 +557,23 @@ class RecorderEngine extends EventEmitter {
     const ct  = (el.controlType || el.type || '').toLowerCase();
 
     switch (rawAction.action) {
+      // ── Date/Time picker actions ───────────────────────────
+      case 'set_date':
+      case 'set_time':
+      case 'set_datetime':
+        return {
+          [key]: rawAction.isoValue || rawAction.value || '',
+          [`${key}__meta`]: {
+            isoValue: rawAction.isoValue || '',
+            rawValue: rawAction.rawValue || rawAction.value || '',
+            displayFormat: rawAction.displayFormat || '',
+            timezone: rawAction.timezone || '',
+            framework: rawAction.framework || 'native',
+            controlSubType: rawAction.controlSubType || 'native',
+            valueBefore: rawAction.valueBefore || '',
+          },
+        };
+
       // ── Text input ─────────────────────────────────────────
       case 'type':
       case 'input':
@@ -593,7 +692,7 @@ class RecorderEngine extends EventEmitter {
     }
 
     // Select/change/toggle → wait for element to be interactable
-    if (['select', 'change', 'toggle'].includes(rawAction.action)) {
+    if (['select', 'change', 'toggle', 'set_date', 'set_time', 'set_datetime'].includes(rawAction.action)) {
       return { type: 'visible', timeout: 5000 };
     }
 
@@ -738,7 +837,19 @@ class RecorderEngine extends EventEmitter {
 
       // Aggregate ALL interaction data into the top-level testData map
       if (step.testData && Object.keys(step.testData).length > 0) {
-        const [rawKey, rawValue] = Object.entries(step.testData)[0];
+        // Separate __meta keys from actual data keys
+        const entries = Object.entries(step.testData);
+        const dataEntries = entries.filter(([k]) => !k.endsWith('__meta'));
+        const metaEntries = entries.filter(([k]) => k.endsWith('__meta'));
+
+        // Use the first non-meta entry as the primary data entry
+        if (dataEntries.length === 0) return tc;
+        const [rawKey, rawValue] = dataEntries[0];
+
+        // Extract inline date/time meta if present
+        const inlineMetaKey = rawKey + '__meta';
+        const inlineMeta = metaEntries.find(([k]) => k === inlineMetaKey);
+        const dateTimeMeta = inlineMeta ? inlineMeta[1] : null;
 
         // Ensure unique key (email, email_2, email_3 …)
         let key = rawKey;
@@ -775,6 +886,12 @@ class RecorderEngine extends EventEmitter {
           elementId:   el.id   || '',
           options: step.options || undefined,
           valueBefore: step.valueBefore ?? undefined,
+          // v3: date/time metadata (from step-level or inline __meta)
+          isoValue:       dateTimeMeta?.isoValue       || step.isoValue       || undefined,
+          displayFormat:  dateTimeMeta?.displayFormat   || step.displayFormat   || undefined,
+          timezone:       dateTimeMeta?.timezone        || step.timezone        || undefined,
+          framework:      dateTimeMeta?.framework       || step.framework       || undefined,
+          controlSubType: dateTimeMeta?.controlSubType  || step.controlSubType  || undefined,
         };
 
         tc.testDataKey = key;

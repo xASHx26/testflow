@@ -28,6 +28,13 @@
       this.paused = false;
       this._detachListeners();
       this._stopModalObserver();
+      // Cleanup datepicker state
+      if (this._datePickerPollTimer) {
+        clearInterval(this._datePickerPollTimer);
+        this._datePickerPollTimer = null;
+      }
+      this._datePickerActive = null;
+      this._datePickerSuppressClicks = false;
       console.log('[TestFlow] Recorder stopped');
     },
 
@@ -49,6 +56,13 @@
     _pointerDragState: null,
     _lastPointerWasDrag: false,
     _DRAG_THRESHOLD: 30, // px movement before we consider it a drag
+
+    // ─── Date/Time Picker State ──────────────────────────────
+    _datePickerObserver: null,       // MutationObserver for calendar popups
+    _datePickerActive: null,         // Currently active datepicker input element
+    _datePickerValueBefore: null,    // Value before interaction
+    _datePickerFramework: null,      // Detected framework name
+    _datePickerSuppressClicks: false, // Suppress calendar cell clicks
 
     _attachListeners() {
       // Focusin — capture value_before for any form element
@@ -137,6 +151,31 @@
 
       const tag = target.tagName.toLowerCase();
       const type = (target.type || '').toLowerCase();
+
+      // ── Date/Time Picker Click Interception ─────────────────
+      // If a datepicker popup is active, suppress clicks on calendar cells,
+      // navigation arrows, month/year selectors — the _finalizeDatePicker
+      // will emit the proper set_date/set_time/set_datetime action.
+      if (this._datePickerSuppressClicks) {
+        const pickerCheck = this._detectDateTimePicker(target);
+        if (pickerCheck.isPicker) return; // Suppress calendar cell clicks
+      }
+
+      // Check if this click OPENS a datepicker popup
+      const datePickerDetect = this._detectDateTimePicker(target);
+      if (datePickerDetect.isPicker && datePickerDetect.inputEl && !this._datePickerActive) {
+        // A calendar popup was clicked (maybe opening it) — start watching
+        this._startDatePickerWatch(datePickerDetect.inputEl, datePickerDetect.framework);
+        return; // Don't record the opening click
+      }
+
+      // Check if clicking ON a date input (which opens native or framework picker)
+      if (tag === 'input' && ['date', 'time', 'datetime-local', 'month', 'week'].includes(type)) {
+        // Native date inputs — their change event handles value capture.
+        // Don't suppress the click, but do track it for value-before.
+        this._datePickerValueBefore = target.value || '';
+      }
+
       // DON'T filter text input clicks — the click may open a datepicker, 
       // autocomplete dropdown, or have other side effects.  The recorder-engine's
       // pending-click buffer will suppress clicks that are immediately followed
@@ -261,6 +300,15 @@
       // records the proper action for these (toggle, radio, select, file).
       if (type === 'checkbox' || type === 'radio' || type === 'file') return;
       if (tag === 'select') return;
+
+      // Skip input events on date/time inputs when a datepicker is active —
+      // the _finalizeDatePicker handles the value capture.
+      if (this._datePickerActive === target) return;
+      if (['date', 'time', 'datetime-local', 'month', 'week'].includes(type)) {
+        // Native date/time inputs: check if a datepicker framework opened
+        const pickerCheck = this._detectDateTimePicker(target);
+        if (pickerCheck.isPicker) return;
+      }
 
       const before = this._valueBefore.get(target) ?? '';
 
@@ -423,14 +471,27 @@
           timestamp: Date.now(),
         });
       } else if (['date', 'time', 'datetime-local', 'month', 'week'].includes(type)) {
+        // ── Native Date/Time Input Change ─────────────────────
+        // If a datepicker framework is actively tracking this input,
+        // let _finalizeDatePicker handle it to avoid duplicate events.
+        if (this._datePickerActive === target) return;
+
+        const actionType = this._classifyDateTimeAction(target, 'native');
+        const isoValue = this._normalizeToISO(target.value, actionType);
         this._sendAction({
-          action: 'change',
+          action: actionType,
           interactionType: 'datetime',
           element: this._extractElement(target),
           url: window.location.href,
-          value: target.value,
+          value: isoValue || target.value,
+          rawValue: target.value,
           valueBefore: before,
           valueAfter: target.value,
+          isoValue: isoValue,
+          displayFormat: this._detectDisplayFormat(target),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+          framework: 'native',
+          controlSubType: 'native',
           timestamp: Date.now(),
         });
       } else {
@@ -658,6 +719,311 @@
         el.getAttribute?.('aria-modal') === 'true' ||
         cls.includes('modal') || cls.includes('dialog') ||
         cls.includes('toast') || cls.includes('snackbar');
+    },
+
+    // ─── Date/Time Picker Detection & Handling ─────────────
+    /**
+     * Detect if an element is part of a date/time picker popup (calendar cells,
+     * month/year navigation, time list items, etc.).
+     * Returns { isPicker: true, framework, inputEl, popupEl } or { isPicker: false }.
+     */
+    _detectDateTimePicker(el) {
+      if (!el) return { isPicker: false };
+      const cls = (el.className || '').toLowerCase();
+      const parentCls = (n) => {
+        let c = n;
+        for (let i = 0; i < 10 && c; i++) {
+          const cc = (c.className || '').toLowerCase();
+          const id = (c.id || '').toLowerCase();
+          // react-datepicker
+          if (cc.includes('react-datepicker') || id.includes('react-datepicker'))
+            return { framework: 'react-datepicker', popup: c.closest('.react-datepicker-popper, .react-datepicker') || c };
+          // MUI DatePicker / TimePicker / DateTimePicker
+          if (cc.includes('muipickersday') || cc.includes('muidatepicker') ||
+              cc.includes('muidatetimepicker') || cc.includes('muitimepicker') ||
+              cc.includes('muipickerscalendar') || cc.includes('muicalendarday') ||
+              cc.includes('muipickersmodal') || cc.includes('muipickerspopper') ||
+              cc.includes('muipickerslayout') || cc.includes('muipickerscalendarheader') ||
+              cc.includes('muiclock') || cc.includes('muitimeclock') ||
+              cc.includes('muidigitalclock') || cc.includes('muimultisectiondigitalclock'))
+            return { framework: 'mui', popup: c.closest('[class*="MuiPopper"], [class*="MuiDialog"], [class*="MuiPickersPopper"]') || c };
+          // Ant Design DatePicker / TimePicker
+          if (cc.includes('ant-picker-dropdown') || cc.includes('ant-picker-panel') ||
+              cc.includes('ant-picker-cell') || cc.includes('ant-picker-time-panel') ||
+              cc.includes('ant-picker-header') || cc.includes('ant-picker-body') ||
+              cc.includes('ant-picker-content') || cc.includes('ant-picker-date-panel') ||
+              cc.includes('ant-calendar'))
+            return { framework: 'antd', popup: c.closest('.ant-picker-dropdown, .ant-picker-panel-container') || c };
+          // Chakra UI / react-day-picker
+          if (cc.includes('chakra-datepicker') || cc.includes('rdp-day') || cc.includes('rdp-cell') ||
+              cc.includes('rdp-month') || cc.includes('rdp-caption') || cc.includes('rdp-table'))
+            return { framework: 'chakra', popup: c.closest('[class*="rdp"], [class*="chakra-datepicker"]') || c };
+          // PrimeReact Calendar
+          if (cc.includes('p-datepicker') || cc.includes('p-datepicker-calendar') ||
+              cc.includes('p-monthpicker') || cc.includes('p-yearpicker') ||
+              cc.includes('p-timepicker'))
+            return { framework: 'primereact', popup: c.closest('.p-datepicker') || c };
+          // Flatpickr
+          if (cc.includes('flatpickr-calendar') || cc.includes('flatpickr-day') ||
+              cc.includes('flatpickr-month') || cc.includes('flatpickr-time'))
+            return { framework: 'flatpickr', popup: c.closest('.flatpickr-calendar') || c };
+          // Bootstrap Datepicker
+          if (cc.includes('datepicker-dropdown') || cc.includes('datepicker-days') ||
+              cc.includes('datepicker-months') || cc.includes('datepicker-years'))
+            return { framework: 'bootstrap-datepicker', popup: c.closest('.datepicker-dropdown, .datepicker') || c };
+          // Generic calendar heuristics
+          if ((cc.includes('calendar') && (cc.includes('day') || cc.includes('cell') || cc.includes('date'))) ||
+              (cc.includes('datepicker') && (cc.includes('day') || cc.includes('cell'))))
+            return { framework: 'generic', popup: c.closest('[class*="calendar"], [class*="datepicker"]') || c };
+          c = c.parentElement;
+        }
+        return null;
+      };
+
+      const detected = parentCls(el);
+      if (!detected) return { isPicker: false };
+
+      // Find the associated input element
+      const inputEl = this._findDateTimeInput(detected.framework, detected.popup);
+
+      return {
+        isPicker: true,
+        framework: detected.framework,
+        inputEl,
+        popupEl: detected.popup,
+      };
+    },
+
+    /**
+     * Find the date/time input element associated with a picker popup.
+     */
+    _findDateTimeInput(framework, popupEl) {
+      // Strategy 1: Look for a focused input of date/time type
+      const focused = document.activeElement;
+      if (focused && (focused.tagName || '').toLowerCase() === 'input') {
+        const ft = (focused.type || '').toLowerCase();
+        if (['date', 'time', 'datetime-local', 'month', 'week', 'text'].includes(ft)) {
+          return focused;
+        }
+      }
+
+      // Strategy 2: Framework-specific lookup
+      switch (framework) {
+        case 'react-datepicker': {
+          const wrapper = document.querySelector('.react-datepicker-wrapper input') ||
+                          document.querySelector('.react-datepicker__input-container input');
+          if (wrapper) return wrapper;
+          break;
+        }
+        case 'mui': {
+          const muiInput = document.querySelector('.MuiInputBase-input[type], .MuiOutlinedInput-input, .MuiInput-input');
+          if (muiInput) return muiInput;
+          break;
+        }
+        case 'antd': {
+          const antInput = document.querySelector('.ant-picker-focused input, .ant-picker-input input');
+          if (antInput) return antInput;
+          break;
+        }
+        case 'primereact': {
+          const primeInput = document.querySelector('.p-calendar .p-inputtext, .p-calendar input');
+          if (primeInput) return primeInput;
+          break;
+        }
+        case 'flatpickr': {
+          const fpInput = document.querySelector('.flatpickr-input, input[data-input]');
+          if (fpInput) return fpInput;
+          break;
+        }
+      }
+
+      // Strategy 3: Find any recently focused date-related input
+      const dateInputs = document.querySelectorAll(
+        'input[type="date"], input[type="time"], input[type="datetime-local"], ' +
+        'input[type="month"], input[type="week"], ' +
+        'input[class*="date" i], input[class*="picker" i], input[class*="calendar" i], ' +
+        'input[placeholder*="date" i], input[placeholder*="DD" i], input[placeholder*="MM" i], ' +
+        'input[placeholder*="YYYY" i], input[placeholder*="mm/dd" i], input[placeholder*="dd/mm" i]'
+      );
+      if (dateInputs.length === 1) return dateInputs[0];
+
+      // Strategy 4: Look near the popup in DOM
+      if (popupEl) {
+        const prev = popupEl.previousElementSibling;
+        if (prev) {
+          const inp = prev.querySelector('input') || (prev.tagName === 'INPUT' ? prev : null);
+          if (inp) return inp;
+        }
+      }
+
+      return null;
+    },
+
+    /**
+     * Determine the action type (set_date, set_time, set_datetime) based on
+     * the input element and detected framework.
+     */
+    _classifyDateTimeAction(inputEl, framework) {
+      if (!inputEl) return 'set_date'; // default
+      const type = (inputEl.type || '').toLowerCase();
+      if (type === 'time') return 'set_time';
+      if (type === 'datetime-local') return 'set_datetime';
+      if (type === 'date') return 'set_date';
+      if (type === 'month') return 'set_date';
+      if (type === 'week') return 'set_date';
+      // For text-type inputs used by frameworks, inspect attributes
+      const cls = (inputEl.className || '').toLowerCase();
+      const ph = (inputEl.placeholder || '').toLowerCase();
+      const ariaLabel = (inputEl.getAttribute('aria-label') || '').toLowerCase();
+      const name = (inputEl.name || '').toLowerCase();
+      if (cls.includes('time') || ph.includes('time') || ariaLabel.includes('time') || name.includes('time')) {
+        if (cls.includes('date') || ph.includes('date') || ariaLabel.includes('date') || name.includes('date'))
+          return 'set_datetime';
+        return 'set_time';
+      }
+      return 'set_date';
+    },
+
+    /**
+     * Normalize a date/time value to ISO 8601 format.
+     * Handles: native input values (already ISO), display formats, timestamps.
+     */
+    _normalizeToISO(value, actionType) {
+      if (!value) return '';
+      const str = String(value).trim();
+      if (!str) return '';
+
+      // Already ISO format?  (2025-01-15, 14:30, 2025-01-15T14:30)
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) return str;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+      if (/^\d{2}:\d{2}(:\d{2})?$/.test(str)) return str;
+      if (/^\d{4}-W\d{2}$/.test(str)) return str;   // week: 2025-W03
+      if (/^\d{4}-\d{2}$/.test(str)) return str;     // month: 2025-01
+
+      // Try parsing as a Date
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        if (actionType === 'set_time') {
+          return d.toTimeString().slice(0, 5); // HH:MM
+        }
+        if (actionType === 'set_datetime') {
+          return d.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+        }
+        return d.toISOString().slice(0, 10); // YYYY-MM-DD
+      }
+
+      // Unable to normalize — return raw value
+      return str;
+    },
+
+    /**
+     * Extract the current display format from a date input (for metadata).
+     */
+    _detectDisplayFormat(inputEl) {
+      if (!inputEl) return '';
+      const ph = inputEl.placeholder || '';
+      if (ph) return ph;
+      // Infer from the current value pattern
+      const val = inputEl.value || '';
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) return 'MM/DD/YYYY';
+      if (/^\d{2}-\d{2}-\d{4}$/.test(val)) return 'DD-MM-YYYY';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return 'YYYY-MM-DD';
+      if (/^\d{2}:\d{2}$/.test(val)) return 'HH:mm';
+      if (/^\d{2}:\d{2}:\d{2}$/.test(val)) return 'HH:mm:ss';
+      return '';
+    },
+
+    /**
+     * Start observing for calendar popup value changes.
+     * When a user clicks a date cell, the input value updates —
+     * this observer captures that final value.
+     */
+    _startDatePickerWatch(inputEl, framework) {
+      this._datePickerActive = inputEl;
+      this._datePickerValueBefore = inputEl ? (inputEl.value || '') : '';
+      this._datePickerFramework = framework;
+      this._datePickerSuppressClicks = true;
+
+      // Watch for value changes via polling (works for all frameworks)
+      // The change/input events will also fire and _handleChange/_handleInput
+      // will detect the active picker and emit the right action.
+      if (this._datePickerPollTimer) clearInterval(this._datePickerPollTimer);
+      this._datePickerPollTimer = setInterval(() => {
+        if (!this._datePickerActive) {
+          clearInterval(this._datePickerPollTimer);
+          return;
+        }
+        // Check if popup is still open
+        const popup = this._isDatePickerPopupOpen(framework);
+        if (!popup) {
+          this._finalizeDatePicker();
+        }
+      }, 300);
+    },
+
+    /**
+     * Check if a datepicker popup is still open.
+     */
+    _isDatePickerPopupOpen(framework) {
+      switch (framework) {
+        case 'react-datepicker':
+          return !!document.querySelector('.react-datepicker-popper, .react-datepicker:not(.react-datepicker--closed)');
+        case 'mui':
+          return !!document.querySelector('[class*="MuiPickersPopper"], [class*="MuiDialog"][class*="picker" i], [class*="MuiPopper"]');
+        case 'antd':
+          return !!document.querySelector('.ant-picker-dropdown:not(.ant-picker-dropdown-hidden), .ant-picker-panel-container');
+        case 'primereact':
+          return !!document.querySelector('.p-datepicker:not(.p-datepicker-inline)');
+        case 'flatpickr':
+          return !!document.querySelector('.flatpickr-calendar.open');
+        default:
+          return !!document.querySelector('[class*="calendar"][class*="open" i], [class*="datepicker"][class*="open" i], [class*="picker-dropdown"]');
+      }
+    },
+
+    /**
+     * Finalize date picker interaction — emit the set_date/set_time/set_datetime action
+     * with the final value from the input.
+     */
+    _finalizeDatePicker() {
+      const inputEl = this._datePickerActive;
+      if (!inputEl) return;
+
+      const newValue = inputEl.value || '';
+      const oldValue = this._datePickerValueBefore || '';
+
+      // Only emit if value actually changed
+      if (newValue && newValue !== oldValue) {
+        const actionType = this._classifyDateTimeAction(inputEl, this._datePickerFramework);
+        const isoValue = this._normalizeToISO(newValue, actionType);
+
+        this._sendAction({
+          action: actionType,
+          interactionType: 'datetime',
+          element: this._extractElement(inputEl),
+          url: window.location.href,
+          value: isoValue || newValue,
+          rawValue: newValue,
+          valueBefore: oldValue,
+          valueAfter: newValue,
+          isoValue: isoValue,
+          displayFormat: this._detectDisplayFormat(inputEl),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+          framework: this._datePickerFramework || 'native',
+          controlSubType: this._datePickerFramework || 'native',
+          timestamp: Date.now(),
+        });
+      }
+
+      // Cleanup
+      this._datePickerActive = null;
+      this._datePickerValueBefore = null;
+      this._datePickerFramework = null;
+      this._datePickerSuppressClicks = false;
+      if (this._datePickerPollTimer) {
+        clearInterval(this._datePickerPollTimer);
+        this._datePickerPollTimer = null;
+      }
     },
 
     // ─── Click Interaction Classifier ────────────────────────
