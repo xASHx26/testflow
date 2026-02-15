@@ -59,6 +59,17 @@ class ReportEngine {
     if (settings.storage.autoTimestampFolder && settings.storage.retainLastN > 0) {
       this._pruneOldReports(baseDir, settings.storage.retainLastN);
     }
+    // ── Pull report metadata from config ─────────────────────
+    const metadata = settings.metadata || {};
+    const reportProjectName = metadata.projectName || projectName;
+    const reportMeta = {
+      projectName: reportProjectName,
+      environment: metadata.environment || 'Development',
+      testerName: metadata.testerName || '',
+      buildNumber: metadata.buildNumber || '',
+      tags: metadata.tags || '',
+      description: metadata.description || '',
+    };
     _p(15, 'Building data model…');
 
     // ── Build data model ─────────────────────────────────────
@@ -96,7 +107,7 @@ class ReportEngine {
 
     // ── Render HTML ──────────────────────────────────────────
     _p(75, 'Rendering HTML report…');
-    const html = this._renderHtml(projectName, env, suiteData, screenshots);
+    const html = this._renderHtml(reportMeta.projectName, env, suiteData, screenshots, reportMeta);
     _p(90, 'Writing report file…');
     const indexPath = path.join(reportDir, 'index.html');
     fs.writeFileSync(indexPath, html, 'utf-8');
@@ -213,11 +224,29 @@ class ReportEngine {
   //  HTML Rendering (self-contained, no external deps)
   // ═══════════════════════════════════════════════════════════
 
-  _renderHtml(projectName, env, suite, screenshots) {
+  _renderHtml(projectName, env, suite, screenshots, reportMeta = {}) {
     const screenshotMap = {};
     for (const [id, shot] of Object.entries(screenshots)) {
       screenshotMap[`${id}.png`] = shot.base64 || (shot.buffer ? shot.buffer.toString('base64') : '');
     }
+
+    // Build metadata badges for the header
+    const metaBadges = [];
+    if (reportMeta.environment) metaBadges.push(`<span class="meta-badge meta-env">${this._esc(reportMeta.environment)}</span>`);
+    if (reportMeta.buildNumber) metaBadges.push(`<span class="meta-badge meta-build">Build #${this._esc(reportMeta.buildNumber)}</span>`);
+    if (reportMeta.testerName) metaBadges.push(`<span class="meta-badge meta-tester">👤 ${this._esc(reportMeta.testerName)}</span>`);
+    metaBadges.push(`<span class="meta-badge">${new Date(suite.startedAt).toLocaleString()}</span>`);
+    metaBadges.push(`<span class="meta-badge">${this._formatDuration(suite.duration)}</span>`);
+
+    // Tags
+    const tagsHtml = reportMeta.tags
+      ? `<div class="report-tags">${reportMeta.tags.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="tag-chip">${this._esc(t)}</span>`).join('')}</div>`
+      : '';
+
+    // Description
+    const descHtml = reportMeta.description
+      ? `<div class="report-description">${this._esc(reportMeta.description)}</div>`
+      : '';
 
     return /*html*/`<!DOCTYPE html>
 <html lang="en">
@@ -237,10 +266,11 @@ ${this._renderCss()}
       <h1>${this._esc(projectName)}</h1>
     </div>
     <div class="header-meta">
-      <span class="meta-badge">${new Date(suite.startedAt).toLocaleString()}</span>
-      <span class="meta-badge">${this._formatDuration(suite.duration)}</span>
+      ${metaBadges.join('\n      ')}
     </div>
   </header>
+  ${tagsHtml}
+  ${descHtml}
 
   <!-- ─── Summary Dashboard ──────────────────────────────── -->
   <section class="dashboard">
@@ -417,6 +447,12 @@ body{background:var(--base);color:var(--text);font-family:'Segoe UI',system-ui,-
 .header-brand h1{font-size:1.4rem;font-weight:600;color:var(--text);}
 .header-meta{display:flex;gap:8px;}
 .meta-badge{background:var(--surface0);padding:4px 12px;border-radius:6px;font-size:0.82rem;color:var(--subtext0);}
+.meta-env{background:rgba(137,180,250,0.15);color:var(--blue);font-weight:600;}
+.meta-build{background:rgba(203,166,247,0.15);color:var(--mauve);font-weight:600;}
+.meta-tester{background:rgba(148,226,213,0.15);color:var(--teal);}
+.report-tags{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 0;}
+.tag-chip{background:var(--surface0);color:var(--peach);padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:500;}
+.report-description{font-size:0.88rem;color:var(--subtext0);padding:8px 0 0;line-height:1.5;font-style:italic;}
 
 /* Dashboard */
 .dashboard{display:flex;gap:16px;margin:24px 0;flex-wrap:wrap;align-items:center;}

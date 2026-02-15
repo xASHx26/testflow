@@ -212,7 +212,7 @@
       <div class="about-logo">🧪</div>
       <div class="about-app-name">TestFlow</div>
       <div class="about-tagline">Professional Test Automation IDE — Bridging Manual &amp; Automation Testing</div>
-      <span class="about-version">v1.0.0-alpha · Electron 29</span>
+      <span class="about-version">v1.0.0-alpha · Electron 29 · 2026</span>
     </div>
 
     <!-- Core Features -->
@@ -226,7 +226,7 @@
           <span class="feature-icon">🔴</span>
           <div class="feature-text">
             <div class="feature-name">Smart Recording</div>
-            <div class="feature-desc">Record user interactions (clicks, typing, navigation, dropdowns, checkboxes) directly in an embedded Chromium browser. Actions are captured with intelligent deduplication and accurate locator generation.</div>
+            <div class="feature-desc">Record user interactions (clicks, typing, navigation, dropdowns, checkboxes) directly in an embedded Chromium browser with intelligent deduplication and accurate locator generation.</div>
           </div>
         </li>
         <li class="feature-item">
@@ -237,17 +237,24 @@
           </div>
         </li>
         <li class="feature-item">
+          <span class="feature-icon">🌐</span>
+          <div class="feature-text">
+            <div class="feature-name">Multi-Tab Browser</div>
+            <div class="feature-desc">Open multiple tabs in the embedded browser with create, close, and switch. Each tab has its own BrowserView and network interception. Ctrl+T / Ctrl+W shortcuts supported.</div>
+          </div>
+        </li>
+        <li class="feature-item">
           <span class="feature-icon">✏️</span>
           <div class="feature-text">
             <div class="feature-name">Test Data Editor</div>
-            <div class="feature-desc">Edit test data in a separate modal window with a full field editor. Modify input values, select options, and checkbox states. Save changes and optionally re-run the test immediately.</div>
+            <div class="feature-desc">Edit test data in a separate modal window. Modify input values, select options, and checkbox states. Save changes and optionally re-run the test immediately.</div>
           </div>
         </li>
         <li class="feature-item">
           <span class="feature-icon">📊</span>
           <div class="feature-text">
             <div class="feature-name">Execution Reports</div>
-            <div class="feature-desc">Generate rich, self-contained HTML reports with Allure-style design. Includes donut chart summary, step-by-step results, screenshots, timing breakdown, pass/fail/skip statistics, and failure summaries.</div>
+            <div class="feature-desc">Generate rich, self-contained HTML reports with Allure-style design. Includes donut chart summary, step-by-step results, screenshots, timing, pass/fail statistics, and report metadata (project name, tester, build number, environment, tags).</div>
           </div>
         </li>
         <li class="feature-item">
@@ -260,8 +267,8 @@
         <li class="feature-item">
           <span class="feature-icon">🔍</span>
           <div class="feature-text">
-            <div class="feature-name">Element Inspector</div>
-            <div class="feature-desc">Inspect page elements with a full inspector panel and a floating Mini Inspector window. View CSS selectors, XPath, attributes, computed styles, and locator rankings.</div>
+            <div class="feature-name">Element Inspector &amp; Search</div>
+            <div class="feature-desc">Full Inspector mode captures multiple elements with locator rankings, outerHTML, and per-element collapsible groups. Search mode (🔍) captures one element at a time, replacing the previous result.</div>
           </div>
         </li>
       </ul>
@@ -278,42 +285,49 @@
           <span class="feature-icon">❄️</span>
           <div class="feature-text">
             <div class="feature-name">Freeze Website</div>
-            <div class="feature-desc">Freeze the current page state (disable JavaScript, timers, and animations) to inspect transient elements like tooltips, dropdowns, and hover menus.</div>
+            <div class="feature-desc">Freeze the current page state (disable JavaScript, timers, animations) to inspect transient elements like tooltips, dropdowns, and hover menus.</div>
           </div>
         </li>
         <li class="feature-item">
-          <span class="feature-icon">🌐</span>
+          <span class="feature-icon">📡</span>
           <div class="feature-text">
             <div class="feature-name">Network Panel</div>
-            <div class="feature-desc">Monitor all network requests (XHR, Fetch, scripts, images) with method, status, URL, timing, and response size. View per-test-case network logs.</div>
+            <div class="feature-desc">Monitor all network requests (XHR, Fetch, scripts, images) with method, status, URL, timing, and response size. Always-on network capture across all tabs.</div>
           </div>
         </li>
         <li class="feature-item">
           <span class="feature-icon">📦</span>
           <div class="feature-text">
             <div class="feature-name">Import / Export Packages</div>
-            <div class="feature-desc">Export complete project packages (flows, test cases, settings) as .zip archives in View or Edit mode. Import packages from other TestFlow users.</div>
+            <div class="feature-desc">Export complete project packages (flows, test cases, settings) as archives. Import packages from other TestFlow users.</div>
           </div>
         </li>
         <li class="feature-item">
           <span class="feature-icon">🐍</span>
           <div class="feature-text">
-            <div class="feature-name">Selenium Export</div>
-            <div class="feature-desc">Export recorded flows as production-ready Selenium Python scripts. Generates clean, idiomatic Python code with WebDriverWait and proper assertions.</div>
+            <div class="feature-name">Selenium Python Export</div>
+            <div class="feature-desc">Export flows as production-ready Selenium Python scripts with pytest structure, fallback locators, data-driven test data, ElementClickInterceptedException handling, and optional Page Object Model.</div>
+          </div>
+        </li>
+        <li class="feature-item">
+          <span class="feature-icon">📝</span>
+          <div class="feature-text">
+            <div class="feature-name">Markdown &amp; JSON Export</div>
+            <div class="feature-desc">Export flows as detailed Markdown test documentation with locator rankings, element outerHTML, and test data. Also export normalized JSON for CI integration.</div>
           </div>
         </li>
         <li class="feature-item">
           <span class="feature-icon">🎨</span>
           <div class="feature-text">
             <div class="feature-name">Workspace Presets</div>
-            <div class="feature-desc">Switch between Recorder, Inspector, Debug, and Review workspace layouts. Each preset optimizes the panel arrangement for its specific workflow.</div>
+            <div class="feature-desc">Switch between Recorder, Inspector, Debug, and Review workspace layouts optimized for each workflow.</div>
           </div>
         </li>
         <li class="feature-item">
           <span class="feature-icon">📋</span>
           <div class="feature-text">
             <div class="feature-name">Test Case Management</div>
-            <div class="feature-desc">Organize test cases with rename, duplicate, delete, and reorder. Download individual test cases as JSON. View page data and network logs per test case.</div>
+            <div class="feature-desc">Organize test cases with rename, duplicate, delete, reorder, per-case reports, page data, and network logs. Download individual test cases as JSON.</div>
           </div>
         </li>
       </ul>
@@ -341,9 +355,11 @@
         <span class="info-label">License</span>
         <span class="info-value">MIT</span>
         <span class="info-label">Author</span>
-        <span class="info-value">TestFlow Team</span>
+        <span class="info-value">xASHx26</span>
         <span class="info-label">Repository</span>
         <span class="info-value"><a href="#" id="link-repo">github.com/xASHx26/testflow</a></span>
+        <span class="info-label">Year</span>
+        <span class="info-value">© 2026</span>
       </div>
     </div>
 
