@@ -46,11 +46,15 @@
     "forceCodeSigning": false,
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "portable"
       ],
       "icon": "assets/icon.ico",
       "signAndEditExecutable": false,
       "sign": null
+    },
+    "portable": {
+      "artifactName": "TestFlow-Portable-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
