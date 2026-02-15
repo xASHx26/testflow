@@ -141,6 +141,32 @@ function registerIpcHandlers(context) {
     return true;
   });
 
+  // ─── Tab Management ──────────────────────────────────────────
+  ipcMain.handle('tabs:create', async (event, url) => {
+    return browserEngine.createTab(url);
+  });
+
+  ipcMain.handle('tabs:close', async (event, tabId) => {
+    return browserEngine.closeTab(tabId);
+  });
+
+  ipcMain.handle('tabs:switch', async (event, tabId) => {
+    return browserEngine.switchTab(tabId);
+  });
+
+  ipcMain.handle('tabs:getList', async () => {
+    return browserEngine.getTabList();
+  });
+
+  ipcMain.handle('tabs:getActive', async () => {
+    return browserEngine.getActiveTabId();
+  });
+
+  // Forward tab changes to renderer
+  browserEngine.on('tabs-changed', (tabList) => {
+    windowManager.sendToRenderer('tabs:changed', tabList);
+  });
+
   // ─── Test Session Tracking (gates network capture) ──────────
   let testSessionActive = false;
 

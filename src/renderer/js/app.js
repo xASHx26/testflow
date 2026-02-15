@@ -165,7 +165,7 @@ class App {
         }
       }
 
-      // Restore test cases
+      // Restore test cases (including execution data for replays)
       if (state.testCases && window.TestCaseManager?.loadState) {
         window.TestCaseManager.loadState(state.testCases);
       }
@@ -175,9 +175,10 @@ class App {
         window.InspectorUI.loadState(state.inspector);
       }
 
+      const tcCount = state.testCases?.testCases?.length || (Array.isArray(state.testCases) ? state.testCases.length : 0);
       window.EventBus.emit('console:log', {
         level: 'info',
-        message: `Session state restored (${state.testCases?.length || 0} test cases, ${state.inspector?.elements?.length || 0} inspector elements)`,
+        message: `Session state restored (${tcCount} test cases, ${state.inspector?.elements?.length || 0} inspector elements)`,
         timestamp: Date.now()
       });
     } catch (err) {

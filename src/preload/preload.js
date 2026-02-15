@@ -32,6 +32,16 @@ contextBridge.exposeInMainWorld('testflow', {
     onNavigated: (callback) => ipcRenderer.on('browser:navigated', (_, url) => callback(url)),
   },
 
+  // ─── Tabs ──────────────────────────────────────────────────
+  tabs: {
+    create: (url) => ipcRenderer.invoke('tabs:create', url),
+    close: (tabId) => ipcRenderer.invoke('tabs:close', tabId),
+    switch: (tabId) => ipcRenderer.invoke('tabs:switch', tabId),
+    getList: () => ipcRenderer.invoke('tabs:getList'),
+    getActive: () => ipcRenderer.invoke('tabs:getActive'),
+    onChanged: (callback) => ipcRenderer.on('tabs:changed', (_, tabs) => callback(tabs)),
+  },
+
   // ─── Recorder ──────────────────────────────────────────────
   recorder: {
     start: (flowId) => ipcRenderer.invoke('recorder:start', flowId),
@@ -171,6 +181,7 @@ contextBridge.exposeInMainWorld('testflow', {
       'menu:report-settings',
       'console:log', 'network:request', 'network:clear',
       'workspace:preset-changed',
+      'tabs:changed',
     ];
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, (_, ...args) => callback(...args));

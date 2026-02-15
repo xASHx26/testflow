@@ -228,16 +228,17 @@ class PanelManager {
   }
 
   /**
-   * Calculate and update the browser view bounds
+   * Calculate and update the browser view bounds.
+   * Uses the browser-container (below the tab bar) for accurate positioning.
    */
   _updateBrowserBounds() {
     // Skip if the BrowserView is intentionally hidden (e.g. overlay open)
     if (this._browserViewSuppressed) return;
 
-    const browserPanel = this.panels.browser;
-    if (!browserPanel) return;
+    const container = document.getElementById('browser-container') || this.panels.browser;
+    if (!container) return;
 
-    const rect = browserPanel.getBoundingClientRect();
+    const rect = container.getBoundingClientRect();
     const bounds = {
       x: Math.round(rect.x),
       y: Math.round(rect.y),
@@ -272,10 +273,11 @@ class PanelManager {
   }
 
   /**
-   * Get current browser panel bounds
+   * Get current browser container bounds (below tab bar)
    */
   getBrowserBounds() {
-    const rect = this.panels.browser?.getBoundingClientRect();
+    const container = document.getElementById('browser-container') || this.panels.browser;
+    const rect = container?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0, width: 800, height: 600 };
     return {
       x: Math.round(rect.x),

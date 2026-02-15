@@ -2,6 +2,7 @@
  * TestFlow — Browser Engine
  * 
  * Controls the embedded BrowserView (lightweight Chromium engine).
+ * Supports multiple tabs — each tab is a separate BrowserView.
  * Provides navigation, script injection, DOM inspection, and screenshot capture.
  */
 
@@ -9,6 +10,7 @@ const { BrowserView, session } = require('electron');
 const path = require('path');
 const EventEmitter = require('events');
 const { ipcMain } = require('electron');
+const { v4: uuidv4 } = require('uuid');
 
 // Isolated session partition for the embedded browser — cleared on quit
 const BROWSER_PARTITION = 'persist:testflow-browser';
@@ -17,6 +19,13 @@ class BrowserEngine extends EventEmitter {
   constructor(mainWindow) {
     super();
     this.mainWindow = mainWindow;
+
+    // ─── Multi-tab state ───────────────────────────────────
+    this.tabs = new Map();          // tabId → { id, view, url, title, consoleMessages, networkRequests }
+    this.activeTabId = null;
+    this._lastBounds = null;        // remember bounds for new tabs
+
+    // Legacy single-tab compat (points to active tab's data)
     this.browserView = null;
     this.inspectorEnabled = false;
     this.currentUrl = '';
@@ -26,15 +35,137 @@ class BrowserEngine extends EventEmitter {
     this._dialogSyncIpcHandler = null;
   }
 
+  // ─── Tab Management ──────────────────────────────────────
+
   /**
-   * Attach a BrowserView to the main window at the given bounds
+   * Create a new tab and optionally navigate to a URL.
+   * Returns the new tab descriptor { id, url, title }.
    */
-  attachView(bounds) {
-    if (this.browserView) {
-      this.mainWindow.removeBrowserView(this.browserView);
+  createTab(url) {
+    if (!this._lastBounds) return null;
+
+    const tabId = uuidv4();
+    const view = this._createBrowserView();
+
+    const tab = {
+      id: tabId,
+      view,
+      url: url || '',
+      title: 'New Tab',
+      consoleMessages: [],
+      networkRequests: [],
+    };
+
+    this.tabs.set(tabId, tab);
+    this._wireViewEvents(tab);
+    this._setupNetworkInterceptionForTab(tab);
+
+    // Switch to the new tab
+    this.switchTab(tabId);
+
+    // Navigate if URL provided
+    if (url) {
+      this.navigate(url).catch(() => {});
     }
 
-    this.browserView = new BrowserView({
+    this.emit('tab-created', { id: tabId, url: tab.url, title: tab.title });
+    this.emit('tabs-changed', this.getTabList());
+    return { id: tabId, url: tab.url, title: tab.title };
+  }
+
+  /**
+   * Close a tab by ID.
+   */
+  closeTab(tabId) {
+    const tab = this.tabs.get(tabId);
+    if (!tab) return false;
+
+    // Remove from main window if it's the active view
+    if (this.activeTabId === tabId) {
+      try { this.mainWindow.removeBrowserView(tab.view); } catch (_) {}
+    }
+
+    // Destroy the view
+    try { tab.view.webContents.destroy(); } catch (_) {}
+    this.tabs.delete(tabId);
+
+    // If we closed the active tab, switch to another
+    if (this.activeTabId === tabId) {
+      this.activeTabId = null;
+      this.browserView = null;
+      const remaining = Array.from(this.tabs.keys());
+      if (remaining.length > 0) {
+        this.switchTab(remaining[remaining.length - 1]);
+      } else {
+        this.currentUrl = '';
+        this.consoleMessages = [];
+        this.networkRequests = [];
+      }
+    }
+
+    this.emit('tab-closed', { id: tabId });
+    this.emit('tabs-changed', this.getTabList());
+    return true;
+  }
+
+  /**
+   * Switch to a tab by ID — shows its BrowserView, hides the previous one.
+   */
+  switchTab(tabId) {
+    const tab = this.tabs.get(tabId);
+    if (!tab) return false;
+
+    // Remove current active view from window
+    if (this.activeTabId && this.activeTabId !== tabId) {
+      const prev = this.tabs.get(this.activeTabId);
+      if (prev) {
+        try { this.mainWindow.removeBrowserView(prev.view); } catch (_) {}
+      }
+    }
+
+    // Add new view
+    this.activeTabId = tabId;
+    this.browserView = tab.view;
+    this.currentUrl = tab.url;
+    this.consoleMessages = tab.consoleMessages;
+    this.networkRequests = tab.networkRequests;
+
+    try { this.mainWindow.addBrowserView(tab.view); } catch (_) {}
+    if (this._lastBounds) {
+      tab.view.setBounds(this._lastBounds);
+    }
+
+    this.emit('tab-switched', { id: tabId, url: tab.url, title: tab.title });
+    this.emit('navigated', tab.url);
+    // Emit network for the newly active tab
+    this.emit('tabs-changed', this.getTabList());
+    return true;
+  }
+
+  /**
+   * Get a list of all tabs (for rendering the tab bar).
+   */
+  getTabList() {
+    return Array.from(this.tabs.values()).map(t => ({
+      id: t.id,
+      url: t.url,
+      title: t.title,
+      active: t.id === this.activeTabId,
+    }));
+  }
+
+  /**
+   * Get the active tab ID.
+   */
+  getActiveTabId() {
+    return this.activeTabId;
+  }
+
+  /**
+   * Create a BrowserView with standard webPreferences.
+   */
+  _createBrowserView() {
+    return new BrowserView({
       webPreferences: {
         preload: path.join(__dirname, '..', '..', 'preload', 'browser-preload.js'),
         contextIsolation: true,
@@ -45,13 +176,71 @@ class BrowserEngine extends EventEmitter {
         partition: BROWSER_PARTITION,
       },
     });
+  }
 
-    this.mainWindow.addBrowserView(this.browserView);
-    this.browserView.setBounds(bounds);
-    this.browserView.setAutoResize({ width: false, height: false });
+  /**
+   * Attach a BrowserView to the main window at the given bounds.
+   * Creates the first tab if none exist.
+   */
+  attachView(bounds) {
+    this._lastBounds = {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+    };
+
+    // If we already have tabs, just re-attach the active one
+    if (this.tabs.size > 0 && this.activeTabId) {
+      const tab = this.tabs.get(this.activeTabId);
+      if (tab) {
+        try { this.mainWindow.addBrowserView(tab.view); } catch (_) {}
+        tab.view.setBounds(this._lastBounds);
+        tab.view.setAutoResize({ width: false, height: false });
+        return true;
+      }
+    }
+
+    // Create first tab
+    const view = this._createBrowserView();
+    const tabId = uuidv4();
+    const tab = {
+      id: tabId,
+      view,
+      url: '',
+      title: 'New Tab',
+      consoleMessages: [],
+      networkRequests: [],
+    };
+
+    this.tabs.set(tabId, tab);
+    this.activeTabId = tabId;
+    this.browserView = view;
+    this.consoleMessages = tab.consoleMessages;
+    this.networkRequests = tab.networkRequests;
+
+    this.mainWindow.addBrowserView(view);
+    view.setBounds(this._lastBounds);
+    view.setAutoResize({ width: false, height: false });
+
+    this._wireViewEvents(tab);
+    this._setupNetworkInterceptionForTab(tab);
+    this._setupDialogIpcListeners();
+
+    this.emit('tab-created', { id: tabId, url: '', title: 'New Tab' });
+    this.emit('tabs-changed', this.getTabList());
+
+    return true;
+  }
+
+  /**
+   * Wire console, navigation, and page-load events for a tab.
+   */
+  _wireViewEvents(tab) {
+    const { view } = tab;
 
     // Intercept console messages
-    this.browserView.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    view.webContents.on('console-message', (event, level, message, line, sourceId) => {
       const entry = {
         level: ['verbose', 'info', 'warning', 'error'][level] || 'info',
         message,
@@ -59,39 +248,56 @@ class BrowserEngine extends EventEmitter {
         source: sourceId,
         timestamp: Date.now(),
       };
-      this.consoleMessages.push(entry);
-      this.emit('console-message', entry);
+      tab.consoleMessages.push(entry);
+      // Only emit to renderer if this is the active tab
+      if (tab.id === this.activeTabId) {
+        this.emit('console-message', entry);
+      }
     });
 
     // Intercept navigation
-    this.browserView.webContents.on('did-navigate', (event, url) => {
-      this.currentUrl = url;
-      this.emit('navigated', url);
+    view.webContents.on('did-navigate', (event, url) => {
+      tab.url = url;
+      tab.title = view.webContents.getTitle() || url;
+      if (tab.id === this.activeTabId) {
+        this.currentUrl = url;
+        this.emit('navigated', url);
+      }
+      this.emit('tabs-changed', this.getTabList());
     });
 
-    this.browserView.webContents.on('did-navigate-in-page', (event, url) => {
-      this.currentUrl = url;
-      this.emit('navigated', url);
+    view.webContents.on('did-navigate-in-page', (event, url) => {
+      tab.url = url;
+      if (tab.id === this.activeTabId) {
+        this.currentUrl = url;
+        this.emit('navigated', url);
+      }
+      this.emit('tabs-changed', this.getTabList());
     });
 
-    // Auto-inject inspector script after every page load (ready for when user enables it)
-    this.browserView.webContents.on('did-finish-load', async () => {
+    // Update tab title when page title changes
+    view.webContents.on('page-title-updated', (event, title) => {
+      tab.title = title || tab.url;
+      this.emit('tabs-changed', this.getTabList());
+    });
+
+    // Auto-inject inspector/dialog scripts after every page load
+    view.webContents.on('did-finish-load', async () => {
+      tab.title = view.webContents.getTitle() || tab.url;
+      this.emit('tabs-changed', this.getTabList());
       try {
-        await this.injectInspector();
-        // Only auto-enable if user has toggled inspector on
+        await this._injectIntoView(view);
         if (this.inspectorEnabled) {
-          await this.executeScript('window.__testflow_inspector?.enable()');
+          await view.webContents.executeJavaScript('window.__testflow_inspector?.enable()', true);
         }
-        // Always inject dialog overrides so native alerts never block the app
-        await this._injectDialogOverrides();
+        await this._injectDialogOverridesForView(view);
       } catch (e) {
         // Non-fatal — page may have redirected
       }
     });
 
-    // Handle beforeunload dialogs — auto-accept to prevent blocking
-    this.browserView.webContents.on('will-prevent-unload', (event) => {
-      // Prevent the beforeunload from blocking navigation
+    // Handle beforeunload dialogs
+    view.webContents.on('will-prevent-unload', (event) => {
       event.preventDefault();
       this.emit('js-dialog', {
         dialogType: 'beforeunload',
@@ -100,14 +306,6 @@ class BrowserEngine extends EventEmitter {
         returnValue: true,
       });
     });
-
-    // Listen for dialog IPC events from the injected overrides
-    this._setupDialogIpcListeners();
-
-    // Intercept network requests via webRequest API
-    this._setupNetworkInterception();
-
-    return true;
   }
 
   /**
@@ -263,13 +461,14 @@ class BrowserEngine extends EventEmitter {
    * Update the BrowserView bounds (called when panels show/hide/resize)
    */
   updateBounds(bounds) {
+    this._lastBounds = {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+    };
     if (this.browserView) {
-      this.browserView.setBounds({
-        x: Math.round(bounds.x),
-        y: Math.round(bounds.y),
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-      });
+      this.browserView.setBounds(this._lastBounds);
     }
   }
 
@@ -311,15 +510,15 @@ class BrowserEngine extends EventEmitter {
   }
 
   /**
-   * Setup network request interception
+   * Setup network request interception for a specific tab.
    */
-  _setupNetworkInterception() {
-    if (!this.browserView) return;
+  _setupNetworkInterceptionForTab(tab) {
+    if (!tab.view) return;
 
     const filter = { urls: ['*://*/*'] };
-    const session = this.browserView.webContents.session;
+    const ses = tab.view.webContents.session;
 
-    session.webRequest.onBeforeRequest(filter, (details, callback) => {
+    ses.webRequest.onBeforeRequest(filter, (details, callback) => {
       const entry = {
         id: details.id,
         url: details.url,
@@ -333,34 +532,55 @@ class BrowserEngine extends EventEmitter {
         fromCache: false,
         error: null,
       };
-      this.networkRequests.push(entry);
+      tab.networkRequests.push(entry);
       // Trim to prevent memory leak
-      if (this.networkRequests.length > 500) {
-        this.networkRequests = this.networkRequests.slice(-400);
+      if (tab.networkRequests.length > 500) {
+        tab.networkRequests.splice(0, tab.networkRequests.length - 400);
       }
       callback({});
     });
 
-    session.webRequest.onCompleted(filter, (details) => {
-      const entry = this.networkRequests.find(r => r.id === details.id);
+    ses.webRequest.onCompleted(filter, (details) => {
+      const entry = tab.networkRequests.find(r => r.id === details.id);
       if (entry) {
         entry.statusCode = details.statusCode;
         entry.fromCache = details.fromCache;
         entry.responseHeaders = details.responseHeaders || {};
         entry.duration = Date.now() - entry.startTime;
-        this.emit('network-response', { ...entry });
+        if (tab.id === this.activeTabId) {
+          this.emit('network-response', { ...entry });
+        }
       }
     });
 
-    session.webRequest.onErrorOccurred(filter, (details) => {
-      const entry = this.networkRequests.find(r => r.id === details.id);
+    ses.webRequest.onErrorOccurred(filter, (details) => {
+      const entry = tab.networkRequests.find(r => r.id === details.id);
       if (entry) {
         entry.statusCode = 0;
         entry.error = details.error;
         entry.duration = Date.now() - entry.startTime;
-        this.emit('network-response', { ...entry });
+        if (tab.id === this.activeTabId) {
+          this.emit('network-response', { ...entry });
+        }
       }
     });
+  }
+
+  /**
+   * Inject inspector script into a specific BrowserView.
+   */
+  async _injectIntoView(view) {
+    const fs = require('fs');
+    const inspectorScript = path.join(__dirname, '..', '..', 'inject', 'inspector-inject.js');
+    const script = fs.readFileSync(inspectorScript, 'utf-8');
+    return view.webContents.executeJavaScript(script, true);
+  }
+
+  /**
+   * Inject dialog overrides into a specific BrowserView.
+   */
+  async _injectDialogOverridesForView(view) {
+    return view.webContents.executeJavaScript(this._getDialogOverrideScript(), true);
   }
 
   /**
@@ -418,12 +638,10 @@ class BrowserEngine extends EventEmitter {
   }
 
   /**
-   * Inject window.alert/confirm/prompt overrides into the page.
-   * These overrides send dialog info via IPC and return immediately,
-   * preventing native dialogs from blocking the app.
+   * Get the dialog override script as a string (shared by all tabs).
    */
-  async _injectDialogOverrides() {
-    const script = `
+  _getDialogOverrideScript() {
+    return `
       (function() {
         if (window.__testflow_dialogs_patched) return;
         window.__testflow_dialogs_patched = true;
@@ -540,17 +758,27 @@ class BrowserEngine extends EventEmitter {
         };
       })();
     `;
-    return this.executeScript(script);
   }
 
   /**
-   * Set up IPC listeners for dialog events from the injected overrides
+   * Inject window.alert/confirm/prompt overrides into the active tab's page.
+   * Legacy method — used by external callers.
+   */
+  async _injectDialogOverrides() {
+    return this.executeScript(this._getDialogOverrideScript());
+  }
+
+  /**
+   * Set up IPC listeners for dialog events from the injected overrides.
+   * Matches against ANY of our tab BrowserViews.
    */
   _setupDialogIpcListeners() {
+    if (this._dialogIpcHandler) return; // already set up
+
     // Async handler for alert (fire-and-forget)
     this._dialogIpcHandler = (event, data) => {
-      // Only handle events from our BrowserView
-      if (this.browserView && event.sender === this.browserView.webContents) {
+      const isOurs = Array.from(this.tabs.values()).some(t => t.view && event.sender === t.view.webContents);
+      if (isOurs) {
         this.emit('js-dialog', {
           dialogType: data.dialogType,
           message: data.message,
@@ -563,7 +791,8 @@ class BrowserEngine extends EventEmitter {
 
     // Sync handler for confirm/prompt (needs return value)
     this._dialogSyncIpcHandler = (event, data) => {
-      if (this.browserView && event.sender === this.browserView.webContents) {
+      const isOurs = Array.from(this.tabs.values()).some(t => t.view && event.sender === t.view.webContents);
+      if (isOurs) {
         this.emit('js-dialog', {
           dialogType: data.dialogType,
           message: data.message,
@@ -600,15 +829,17 @@ class BrowserEngine extends EventEmitter {
   }
 
   /**
-   * Destroy the browser view
+   * Destroy all tabs and clean up
    */
   destroy() {
     this._teardownDialogIpcListeners();
-    if (this.browserView) {
-      this.mainWindow.removeBrowserView(this.browserView);
-      this.browserView.webContents.destroy();
-      this.browserView = null;
+    for (const [tabId, tab] of this.tabs) {
+      try { this.mainWindow.removeBrowserView(tab.view); } catch (_) {}
+      try { tab.view.webContents.destroy(); } catch (_) {}
     }
+    this.tabs.clear();
+    this.activeTabId = null;
+    this.browserView = null;
   }
 }
 

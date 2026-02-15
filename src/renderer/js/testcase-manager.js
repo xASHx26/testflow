@@ -449,14 +449,32 @@
 
   // ─── State persistence API ──────────────────────────────────
   function getState() {
-    return testCases.map(tc => ({ ...tc }));
+    return {
+      testCases: testCases.map(tc => ({ ...tc })),
+      executionStore: JSON.parse(JSON.stringify(executionStore)),
+    };
   }
 
   function loadState(data) {
     testCases.length = 0;
-    if (Array.isArray(data)) {
+    Object.keys(executionStore).forEach(k => delete executionStore[k]);
+
+    if (data && Array.isArray(data.testCases)) {
+      // New format: { testCases: [...], executionStore: {...} }
+      data.testCases.forEach(tc => testCases.push({ ...tc }));
+      if (data.executionStore) {
+        Object.assign(executionStore, data.executionStore);
+      }
+    } else if (Array.isArray(data)) {
+      // Legacy format: plain array of test cases
       data.forEach(tc => testCases.push({ ...tc }));
     }
+
+    // Enable report button if we have execution data
+    if (btnReport) {
+      btnReport.disabled = Object.keys(executionStore).length === 0;
+    }
+
     render();
   }
 
