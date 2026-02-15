@@ -707,10 +707,14 @@ class ReplayEngine extends EventEmitter {
           (() => {
             const el = ${locatorJs};
             if (!el) return;
-            const nativeSetter = Object.getOwnPropertyDescriptor(
-              window.HTMLInputElement.prototype, 'value')?.set;
+            const tag = (el.tagName || '').toLowerCase();
+            const nativeSetter = tag === 'textarea'
+              ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+              : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
             if (nativeSetter) nativeSetter.call(el, '${escaped}');
             else el.value = '${escaped}';
+            const tracker = el._valueTracker;
+            if (tracker) tracker.setValue('');
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           })()

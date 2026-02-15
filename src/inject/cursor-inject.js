@@ -277,15 +277,23 @@
     el.classList.add('__tf-typing-caret');
     el.focus();
 
-    const nativeSetter =
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set ||
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+    // Use the correct prototype setter based on element type.
+    // HTMLInputElement.prototype.value setter ONLY works on <input>,
+    // HTMLTextAreaElement.prototype.value setter ONLY works on <textarea>.
+    // Using the wrong one throws or silently fails on React-controlled elements.
+    const tag = (el.tagName || '').toLowerCase();
+    const nativeSetter = tag === 'textarea'
+      ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+      : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
     const perChar = duration / text.length;
     for (let i = 1; i <= text.length; i++) {
       const partial = text.substring(0, i);
       if (nativeSetter) nativeSetter.call(el, partial);
       else el.value = partial;
+      // Reset React's _valueTracker so it detects the change
+      const tracker = el._valueTracker;
+      if (tracker) tracker.setValue(i > 1 ? text.substring(0, i - 1) : '');
       el.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(perChar);
     }
