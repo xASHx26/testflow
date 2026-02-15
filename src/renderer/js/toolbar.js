@@ -116,6 +116,10 @@ class Toolbar {
     window.testflow.on('menu:inspector-toggle', () => this._toggleInspector());
     window.testflow.on('menu:mini-inspector-toggle', () => this._toggleMiniInspector());
 
+    // Bottom panel tab shortcuts
+    window.testflow.on('menu:toggle-network', () => this._switchBottomTab('network'));
+    window.testflow.on('menu:toggle-console', () => this._switchBottomTab('console'));
+
     // Export menu items
     window.testflow.on('menu:export-selenium-python', () => this._export('seleniumPython', 'Selenium Python'));
     window.testflow.on('menu:export-markdown', () => this._export('markdown', 'Markdown Report'));
@@ -811,7 +815,27 @@ class Toolbar {
       return url.slice(0, 30);
     }
   }
+  // ─── Bottom Tab Switching ──────────────────────────────
+  _switchBottomTab(tabName) {
+    // Ensure bottom panel is visible
+    window.PanelManager.showPanel('bottom');
 
+    // Activate the target tab
+    const bottomPanel = document.getElementById('panel-bottom');
+    if (!bottomPanel) return;
+
+    const tabs = bottomPanel.querySelectorAll('.panel-tab[data-tab]');
+    tabs.forEach(t => t.classList.remove('active'));
+
+    const targetTab = bottomPanel.querySelector(`.panel-tab[data-tab="${tabName}"]`);
+    if (targetTab) targetTab.classList.add('active');
+
+    bottomPanel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const targetContent = bottomPanel.querySelector(`#tab-${tabName}`);
+    if (targetContent) targetContent.classList.add('active');
+
+    window.EventBus.emit('tab:switched', tabName);
+  }
   // ─── Status ──────────────────────────────────────────────
   _setStatus(state, text) {
     this.statusDot.className = `status-dot ${state}`;

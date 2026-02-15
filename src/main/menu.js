@@ -248,6 +248,7 @@ function buildAppMenu(context) {
         },
         {
           label: 'Toggle Network Panel',
+          accelerator: 'CmdOrCtrl+Shift+N',
           click: () => windowManager.sendToRenderer('menu:toggle-network'),
         },
         { type: 'separator' },

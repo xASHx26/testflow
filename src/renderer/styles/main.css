@@ -175,6 +175,42 @@ html, body {
   50% { box-shadow: 0 0 0 4px transparent; }
 }
 
+/* Inspector button active */
+#btn-inspector.active {
+  background: var(--accent-mauve);
+  color: #1e1e2e;
+  animation: pulse-inspect 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-inspect {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(203, 166, 247, 0.35); }
+  50% { box-shadow: 0 0 0 5px transparent; }
+}
+
+/* Search Inspector button active */
+#btn-mini-inspector.active {
+  background: var(--accent-pink);
+  color: #1e1e2e;
+  animation: pulse-search-inspect 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-search-inspect {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 194, 231, 0.35); }
+  50% { box-shadow: 0 0 0 5px transparent; }
+}
+
+/* Recording active button */
+#btn-record.active {
+  background: var(--color-record);
+  color: #1e1e2e;
+}
+
+/* Replay active button */
+#btn-replay.active {
+  background: var(--color-replay);
+  color: #1e1e2e;
+}
+
 .toolbar-separator {
   width: 1px;
   height: 24px;
