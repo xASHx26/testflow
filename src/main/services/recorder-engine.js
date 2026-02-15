@@ -506,13 +506,18 @@ class RecorderEngine extends EventEmitter {
       case 'select': {
         if (rawAction.interactionType === 'radio')
           return { [key]: rawAction.valueAfter ?? rawAction.value ?? '' };
-        return { [key]: rawAction.selectedValue || rawAction.value || '' };
+        // Store the DISPLAY TEXT (selectedText) as the test data value.
+        // The replay select handler matches both by value-attribute and by
+        // display text, so using the human-readable display text here makes
+        // the test data editor more intuitive for users who want to change
+        // the selected option.
+        return { [key]: rawAction.selectedText || rawAction.selectedValue || rawAction.value || '' };
       }
 
       // ── Change (slider, color, file, date/time, number) ────
       case 'change': {
         if (ct === 'select' || ct === 'combobox' || ct === 'listbox' || ct === 'multiselect' || ct === 'cascader')
-          return { [key]: rawAction.selectedValue || rawAction.value || '' };
+          return { [key]: rawAction.selectedText || rawAction.selectedValue || rawAction.value || '' };
         if (ct === 'checkbox' || ct === 'toggle')
           return { [key]: rawAction.valueAfter ?? !!rawAction.checked };
         if (ct === 'radio')

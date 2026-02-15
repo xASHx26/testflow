@@ -335,17 +335,44 @@ class ReplayEngine extends EventEmitter {
 
         const found = await this.browserEngine.executeScript(check);
         if (found) {
-          // For CSS selectors, verify uniqueness — if multiple elements match,
-          // reject this locator so the fallback chain tries a more specific one.
+          // Verify uniqueness — if multiple elements match, reject this
+          // locator so the fallback chain tries a more specific one.
           if (locator.type === 'css') {
             const escapedCss = locator.value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             const count = await this.browserEngine.executeScript(
               `document.querySelectorAll('${escapedCss}').length`
             );
-            if (count > 1) {
-              // Not unique — let the fallback chain try the next locator
-              return false;
-            }
+            if (count > 1) return false;
+          }
+          // buttonText: check if multiple buttons share the same text
+          if (locator.type === 'buttonText') {
+            const escapedBt = locator.value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const count = await this.browserEngine.executeScript(`
+              Array.from(document.querySelectorAll('button,[role="button"]')).filter(
+                el => el.textContent.trim() === '${escapedBt}'
+              ).length
+            `);
+            if (count > 1) return false;
+          }
+          // linkText: check if multiple links share the same text
+          if (locator.type === 'linkText') {
+            const escapedLt = locator.value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const count = await this.browserEngine.executeScript(`
+              Array.from(document.querySelectorAll('a')).filter(
+                el => el.textContent.trim() === '${escapedLt}'
+              ).length
+            `);
+            if (count > 1) return false;
+          }
+          // text: generic text match — very likely to match many elements
+          if (locator.type === 'text') {
+            const escapedTx = locator.value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const count = await this.browserEngine.executeScript(`
+              Array.from(document.querySelectorAll('*')).filter(
+                el => el.children.length === 0 && el.textContent.trim() === '${escapedTx}'
+              ).length
+            `);
+            if (count > 1) return false;
           }
           return true;
         }
@@ -559,11 +586,17 @@ class ReplayEngine extends EventEmitter {
       case 'select': {
         const value = Object.values(step.testData || {})[0] || '';
         const escaped = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const lowerEscaped = String(value).toLowerCase().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
         await this._visualMoveAndHighlight(locatorJs, `select: "${value}"`);
         await this._visualClickRipple();
-        // Perform the actual selection with value-attribute → display-text fallback.
-        // Use the native value setter + React's change handler to ensure
+        // Perform the actual selection with multi-strategy matching:
+        //   1. Exact value-attribute match
+        //   2. Exact display-text match
+        //   3. Case-insensitive value-attribute match
+        //   4. Case-insensitive display-text match
+        //   5. Partial / contains match (for long option text)
+        // Uses the native value setter + React's change handler to ensure
         // React-controlled <select> elements (e.g. datepicker month/year) update.
         const selectOk = await this.browserEngine.executeScript(`
           (() => {
@@ -572,17 +605,25 @@ class ReplayEngine extends EventEmitter {
             el.focus();
             if (el.tagName && el.tagName.toLowerCase() === 'select' && el.options) {
               const prev = el.value;
-              // 1. Try exact value-attribute match
-              const byVal = Array.from(el.options).find(o => o.value === '${escaped}');
-              if (byVal) {
-                el.value = byVal.value;
+              const opts = Array.from(el.options);
+              const target = '${escaped}';
+              const targetLower = '${lowerEscaped}';
+              let matched = null;
+              // 1. Exact value-attribute match
+              matched = opts.find(o => o.value === target);
+              // 2. Exact display-text match
+              if (!matched) matched = opts.find(o => o.text.trim() === target || o.textContent.trim() === target);
+              // 3. Case-insensitive value match
+              if (!matched) matched = opts.find(o => o.value.toLowerCase() === targetLower);
+              // 4. Case-insensitive text match
+              if (!matched) matched = opts.find(o => o.text.trim().toLowerCase() === targetLower || o.textContent.trim().toLowerCase() === targetLower);
+              // 5. Partial / contains match (for long option texts)
+              if (!matched && target.length > 2) matched = opts.find(o => o.text.trim().toLowerCase().includes(targetLower) || o.value.toLowerCase().includes(targetLower));
+              if (matched) {
+                el.value = matched.value;
               } else {
-                // 2. Try display-text match (backward compat)
-                const byText = Array.from(el.options).find(
-                  o => o.text.trim() === '${escaped}' || o.textContent.trim() === '${escaped}'
-                );
-                if (byText) el.value = byText.value;
-                else el.value = '${escaped}';
+                // Last resort — set value directly
+                el.value = target;
               }
               // Use native setter to trigger React's synthetic onChange
               const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -590,7 +631,7 @@ class ReplayEngine extends EventEmitter {
               if (nativeSetter) nativeSetter.call(el, el.value);
               el.dispatchEvent(new Event('input', { bubbles: true }));
               el.dispatchEvent(new Event('change', { bubbles: true }));
-              return el.value !== prev ? 'ok' : (el.value === '${escaped}' ? 'ok' : 'no-change');
+              return matched ? 'ok' : (el.value !== prev ? 'ok' : 'no-match');
             } else {
               el.value = '${escaped}';
               el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -599,7 +640,7 @@ class ReplayEngine extends EventEmitter {
           })()
         `);
         if (selectOk === 'not-found') throw new Error('Select element not found during action');
-        if (selectOk === 'no-change') throw new Error(`Failed to select "${value}" — no matching option`);
+        if (selectOk === 'no-match') throw new Error(`Failed to select "${value}" — no matching option`);
         await this._sleep(500);
         await this._visualCleanup();
         break;
@@ -859,21 +900,34 @@ class ReplayEngine extends EventEmitter {
   async _visualClick(locatorJs, label) {
     await this._visualMoveAndHighlight(locatorJs, label);
     await this._visualClickRipple();
-    // Perform the actual click with full pointer/mouse event sequence
+    // Perform the actual click with full pointer/mouse event sequence.
+    // First scroll into view and verify the target element is actually at
+    // the click coordinates (not obscured by another element / dropdown).
     await this.browserEngine.executeScript(`
       (() => {
         const el = ${locatorJs};
         if (!el) return;
+        el.scrollIntoView({block:'center', behavior:'instant'});
         if (typeof el.focus === 'function') el.focus();
         const r = el.getBoundingClientRect();
         const cx = r.left + r.width / 2;
         const cy = r.top + r.height / 2;
-        const opts = { bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy, button:0 };
-        el.dispatchEvent(new PointerEvent('pointerdown', opts));
-        el.dispatchEvent(new MouseEvent('mousedown', opts));
-        el.dispatchEvent(new PointerEvent('pointerup', opts));
-        el.dispatchEvent(new MouseEvent('mouseup', opts));
-        el.click();
+        // Verify this element (or a descendant) is at the click point
+        const atPoint = document.elementFromPoint(cx, cy);
+        const clickTarget = (atPoint && (el === atPoint || el.contains(atPoint))) ? el : (atPoint || el);
+        // If the element at the point is NOT our target, try to click our
+        // target directly anyway (it may be partially obscured but still
+        // clickable via .click())
+        const target = (atPoint && el !== atPoint && !el.contains(atPoint)) ? el : clickTarget;
+        const tr = target.getBoundingClientRect();
+        const tcx = tr.left + tr.width / 2;
+        const tcy = tr.top + tr.height / 2;
+        const opts = { bubbles:true, cancelable:true, view:window, clientX:tcx, clientY:tcy, button:0 };
+        target.dispatchEvent(new PointerEvent('pointerdown', opts));
+        target.dispatchEvent(new MouseEvent('mousedown', opts));
+        target.dispatchEvent(new PointerEvent('pointerup', opts));
+        target.dispatchEvent(new MouseEvent('mouseup', opts));
+        target.click();
       })()
     `);
     await this._sleep(120);
@@ -957,8 +1011,16 @@ class ReplayEngine extends EventEmitter {
         return `Array.from(document.querySelectorAll('a')).find(el => el.textContent.trim() === '${escaped}')`;
       case 'buttonText':
         return `Array.from(document.querySelectorAll('button,[role="button"]')).find(el => el.textContent.trim() === '${escaped}')`;
+      case 'nthButtonText': {
+        const idx = locator.index || 0;
+        return `Array.from(document.querySelectorAll('button,[role="button"]')).filter(el => el.textContent.trim() === '${escaped}')[${idx}]`;
+      }
+      case 'nthLinkText': {
+        const idx = locator.index || 0;
+        return `Array.from(document.querySelectorAll('a')).filter(el => el.textContent.trim() === '${escaped}')[${idx}]`;
+      }
       case 'text':
-        return `Array.from(document.querySelectorAll('*')).find(el => el.textContent.trim() === '${escaped}')`;
+        return `Array.from(document.querySelectorAll('*')).find(el => el.children.length === 0 && el.textContent.trim() === '${escaped}')`;
       default:
         return `document.querySelector('${escaped}')`;
     }
@@ -1105,10 +1167,13 @@ class ReplayEngine extends EventEmitter {
           const meta  = tdMeta[tc.testDataKey] || {};
           step.testData = { [tc.testDataKey]: value };
           step.value    = value;
+          const ct = meta.controlType || meta.type || 'text';
           step.element  = {
             name: meta.elementName || tc.testDataKey,
-            type: meta.controlType || meta.type || 'text',
+            type: ct,
             id:   meta.elementId || '',
+            // Infer tag from controlType so _performAction routes correctly
+            tag: ct === 'select' || ct === 'combobox' || ct === 'listbox' ? 'select' : '',
           };
         }
         // Legacy support: old-style per-step testData {field, value, type}

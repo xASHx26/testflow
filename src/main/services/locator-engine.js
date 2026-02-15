@@ -144,6 +144,35 @@ class LocatorEngine {
       }
     }
 
+    // 9b. Indexed button/link locator — when multiple elements share the same
+    // text, use the recorded tagIndex to pick the correct one.  This is stored
+    // as a special 'nthButtonText' / 'nthLinkText' type and the replay engine
+    // uses it to select the Nth matching element.
+    if ((elementData.tag === 'button' || elementData.role === 'button') && elementData.text && typeof elementData.tagIndex === 'number') {
+      const cleanText = elementData.text.replace(/\s+/g, ' ').trim();
+      if (cleanText.length > 0 && cleanText.length < 80) {
+        locators.push({
+          type: 'nthButtonText',
+          value: cleanText,
+          index: elementData.tagIndex,
+          strategy: 'nthButtonText',
+          confidence: 0,
+        });
+      }
+    }
+    if (elementData.tag === 'a' && elementData.text && typeof elementData.tagIndex === 'number') {
+      const cleanText = elementData.text.replace(/\s+/g, ' ').trim();
+      if (cleanText.length > 0 && cleanText.length < 80) {
+        locators.push({
+          type: 'nthLinkText',
+          value: cleanText,
+          index: elementData.tagIndex,
+          strategy: 'nthLinkText',
+          confidence: 0,
+        });
+      }
+    }
+
     // 10. CSS selector (composed)
     const cssSelector = this._buildCSSSelector(elementData);
     if (cssSelector) {
@@ -279,6 +308,18 @@ class LocatorEngine {
         uniqueness = 0.8;
         stability = 0.75;
         readability = 0.95;
+        break;
+
+      case 'nthButtonText':
+        uniqueness = 0.9;
+        stability = 0.7;
+        readability = 0.85;
+        break;
+
+      case 'nthLinkText':
+        uniqueness = 0.9;
+        stability = 0.7;
+        readability = 0.85;
         break;
 
       case 'css': {
